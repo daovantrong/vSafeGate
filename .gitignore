@@ -1,0 +1,5 @@
+# Binaries
+*-linux-amd64
+*.exe
+
+caddy.gz

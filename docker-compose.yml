@@ -1,0 +1,21 @@
+services:
+  vsafegate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vsafegate-core
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./rules:/etc/caddy/rules:ro
+      - vsafegate_data:/data
+      - vsafegate_config:/config
+    environment:
+      - TZ=Asia/Ho_Chi_Minh
+
+volumes:
+  vsafegate_data:
+  vsafegate_config:

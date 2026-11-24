@@ -1,0 +1,1217 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Hướng Dẫn Kết Nối Ổ Đĩa Dữ Liệu Từ Xa - KienTrucHT</title>
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: #eff6ff;
+      --success: #10b981;
+      --success-light: #f0fdf4;
+      --warning: #f59e0b;
+      --warning-light: #fffbeb;
+      --danger: #ef4444;
+      --slate-50: #f8fafc;
+      --slate-100: #f1f5f9;
+      --slate-200: #e2e8f0;
+      --slate-300: #cbd5e1;
+      --slate-600: #475569;
+      --slate-700: #334155;
+      --slate-800: #1e293b;
+      --slate-900: #0f172a;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font);
+      background-color: #f8fafc;
+      color: var(--slate-800);
+      line-height: 1.6;
+      padding-bottom: 60px;
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      color: white;
+      padding: 40px 20px 32px;
+      text-align: center;
+      box-shadow: 0 4px 20px rgba(37, 99, 235, 0.15);
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.2);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+      line-height: 1.3;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: #dbeafe;
+      max-width: 650px;
+      margin: 0 auto;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 860px;
+      margin: -20px auto 0;
+      padding: 0 16px;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 4px 24px -2px rgba(15, 23, 42, 0.08);
+      border: 1px solid var(--slate-200);
+      padding: 24px 20px;
+      margin-bottom: 20px;
+    }
+
+    /* Config Box */
+    .config-box {
+      background: var(--primary-light);
+      border: 1px solid #bfdbfe;
+      border-radius: 12px;
+      padding: 18px 16px;
+      margin-bottom: 24px;
+    }
+    .config-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #1e40af;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .config-item {
+      display: flex;
+      flex-direction: column;
+    }
+    .config-item label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--slate-600);
+      margin-bottom: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .config-item input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1.5px solid var(--slate-300);
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--slate-800);
+      background: white;
+      transition: all 0.2s;
+    }
+    .config-item input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+    .config-item.full-width {
+      grid-column: 1 / -1;
+    }
+    .input-with-icon {
+      position: relative;
+      display: flex;
+      align-items: center;
+      width: 100%;
+    }
+    .input-with-icon input {
+      padding-right: 42px;
+    }
+    .btn-toggle-eye {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--slate-600);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      border-radius: 6px;
+      transition: all 0.2s;
+    }
+    .btn-toggle-eye:hover {
+      color: var(--primary);
+      background: var(--slate-100);
+    }
+
+    /* Mode Selection Cards */
+    .mode-section {
+      grid-column: 1 / -1;
+      margin-top: 6px;
+    }
+    .mode-section > label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--slate-600);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .mode-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .mode-card {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 14px;
+      border: 1.5px solid var(--slate-300);
+      border-radius: 10px;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .mode-card:hover {
+      border-color: var(--primary);
+      background: #fafafa;
+    }
+    .mode-card.selected {
+      border-color: var(--success);
+      background: var(--success-light);
+    }
+    .mode-card input[type="radio"] {
+      margin-top: 2px;
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      accent-color: var(--success);
+    }
+    .mode-text {
+      flex: 1;
+    }
+    .mode-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--slate-900);
+      line-height: 1.3;
+    }
+    .mode-desc {
+      font-size: 12px;
+      color: var(--slate-600);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    /* Tabs Header */
+    .tabs-header {
+      display: flex;
+      gap: 6px;
+      border-bottom: 2px solid var(--slate-200);
+      margin-bottom: 20px;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+      padding-bottom: 2px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tabs-header::-webkit-scrollbar {
+      display: none;
+    }
+    .tab-btn {
+      padding: 9px 14px;
+      border: none;
+      background: none;
+      font-size: 13.5px;
+      font-weight: 600;
+      color: var(--slate-600);
+      cursor: pointer;
+      border-radius: 8px 8px 0 0;
+      position: relative;
+      transition: all 0.2s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .tab-btn:hover {
+      color: var(--primary);
+      background: var(--slate-100);
+    }
+    .tab-btn.active {
+      color: var(--primary);
+      font-weight: 700;
+    }
+    .tab-btn.active::after {
+      content: '';
+      position: absolute;
+      bottom: -2px;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--primary);
+      border-radius: 3px 3px 0 0;
+    }
+    .tab-pane {
+      display: none;
+      animation: fadeIn 0.2s ease-in-out;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Step items */
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .step-item {
+      display: flex;
+      gap: 14px;
+      position: relative;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-content {
+      flex: 1;
+      min-width: 0;
+    }
+    .step-title {
+      font-size: 15.5px;
+      font-weight: 700;
+      color: var(--slate-900);
+      margin-bottom: 5px;
+    }
+    .step-desc {
+      font-size: 13.5px;
+      color: var(--slate-600);
+      margin-bottom: 10px;
+      line-height: 1.5;
+    }
+
+    /* Modern Terminal Code Block (No overlapping) */
+    .code-box {
+      background: var(--slate-900);
+      border-radius: 10px;
+      border: 1px solid #334155;
+      margin: 10px 0;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .code-topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 12px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+    }
+    .code-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .code-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      display: inline-block;
+    }
+    .copy-btn {
+      background: var(--primary);
+      border: none;
+      color: white;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .copy-btn:hover {
+      background: var(--primary-hover);
+    }
+    .code-text {
+      padding: 12px 14px;
+      color: #38bdf8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      word-break: break-all;
+      white-space: pre-wrap;
+      overflow-x: auto;
+    }
+
+    /* Button Download */
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--success);
+      color: white;
+      font-size: 13.5px;
+      font-weight: 600;
+      padding: 10px 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+      text-decoration: none;
+      margin-top: 6px;
+    }
+    .btn-download:hover {
+      background: #059669;
+    }
+
+    /* Alerts (Block layout, fixed flex bug) */
+    .alert {
+      padding: 12px 14px;
+      border-radius: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-top: 10px;
+      border-left: 4px solid transparent;
+    }
+    .alert-tip {
+      background: #ecfdf5;
+      border-left-color: var(--success);
+      color: #065f46;
+    }
+    .alert-warning {
+      background: #fffbeb;
+      border-left-color: var(--warning);
+      color: #92400e;
+    }
+    .alert-info {
+      background: #f0f9ff;
+      border-left-color: #0284c7;
+      color: #075985;
+    }
+
+    /* Visual Mockup Box */
+    .mockup-box {
+      background: #f8fafc;
+      border: 1px dashed var(--slate-300);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--slate-700);
+      line-height: 1.5;
+    }
+    .mockup-box strong {
+      color: var(--slate-900);
+    }
+
+    /* FAQ Section */
+    .faq-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--slate-900);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .faq-item {
+      border-bottom: 1px solid var(--slate-200);
+      padding: 14px 0;
+    }
+    .faq-item:last-child {
+      border-bottom: none;
+    }
+    .faq-q {
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--slate-900);
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    .faq-a {
+      font-size: 13.5px;
+      color: var(--slate-600);
+      line-height: 1.6;
+    }
+
+    /* Toast Notification */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: #0f172a;
+      color: white;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      opacity: 0;
+      pointer-events: none;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 1000;
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    footer {
+      text-align: center;
+      font-size: 12.5px;
+      color: var(--slate-600);
+      margin-top: 28px;
+    }
+
+    /* Responsive Queries for Narrow / Mobile Screens */
+    @media (max-width: 600px) {
+      header {
+        padding: 30px 16px 26px;
+      }
+      h1 {
+        font-size: 21px;
+      }
+      .subtitle {
+        font-size: 13.5px;
+      }
+      .container {
+        padding: 0 10px;
+        margin-top: -16px;
+      }
+      .card {
+        padding: 18px 14px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+      }
+      .config-box {
+        padding: 14px 12px;
+      }
+      .config-grid {
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+      .step-item {
+        gap: 10px;
+      }
+      .step-num {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+      }
+      .step-title {
+        font-size: 14.5px;
+      }
+      .code-topbar {
+        padding: 6px 10px;
+      }
+      .code-text {
+        font-size: 12px;
+        padding: 10px 12px;
+      }
+      .tab-btn {
+        padding: 8px 12px;
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <span class="badge">vSafeGate Secure Gateway</span>
+    <h1>Hướng Dẫn Kết Nối Ổ Đĩa Dữ Liệu Từ Xa</h1>
+    <p class="subtitle">Truy cập thư mục làm việc, tải và sao lưu tài liệu trực tiếp từ máy tính như ổ đĩa nội bộ một cách an toàn và bảo mật.</p>
+  </header>
+
+  <div class="container">
+    
+    <!-- Quick Config Settings -->
+    <div class="card">
+      <div class="config-box">
+        <div class="config-title">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          Thông Tin Máy Chủ Của Bạn (Tự động cập nhật lệnh)
+        </div>
+        
+        <div class="config-grid">
+          <div class="config-item">
+            <label>Máy chủ (Domain)</label>
+            <input type="text" id="cfgDomain" value="data.kientrucht.com" oninput="updateAllCommands()">
+          </div>
+          <div class="config-item">
+            <label>Cổng kết nối (Port)</label>
+            <input type="number" id="cfgPort" value="4450" oninput="updateAllCommands()">
+          </div>
+          <div class="config-item">
+            <label>Tài khoản (Username)</label>
+            <input type="text" id="cfgUser" value="smb_user" oninput="updateAllCommands()">
+          </div>
+          <div class="config-item">
+            <label>Mật khẩu (Password)</label>
+            <div class="input-with-icon">
+              <input type="password" id="cfgPass" value="smb_p@ssw0rd" placeholder="Nhập mật khẩu" oninput="updateAllCommands()">
+              <button type="button" class="btn-toggle-eye" onclick="togglePassVisibility()" title="Ẩn/Hiện mật khẩu" aria-label="Ẩn/Hiện mật khẩu">
+                <svg id="eyeIcon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <!-- Selectable Radio Mode Cards -->
+          <div class="mode-section">
+            <label>Phương thức truy cập:</label>
+            <div class="mode-options">
+              
+              <div class="mode-card selected" id="cardModeUnc" onclick="selectMode('unc')">
+                <input type="radio" name="accessMode" id="radioUnc" value="unc" checked onchange="updateAllCommands()">
+                <div class="mode-text">
+                  <div class="mode-title">🛡️ Truy cập trực tiếp UNC (Khuyên dùng - Mở tất cả thư mục)</div>
+                  <div class="mode-desc">Không gán ký tự ổ đĩa (Z:, Y:). Kết nối mở toàn bộ các thư mục chung (HT_DATA, HT_WORK...) và chống Virus/Ransomware mã hóa ổ đĩa.</div>
+                </div>
+              </div>
+
+              <div class="mode-card" id="cardModeDrive" onclick="selectMode('drive')">
+                <input type="radio" name="accessMode" id="radioDrive" value="drive" onchange="updateAllCommands()">
+                <div class="mode-text">
+                  <div class="mode-title">📁 Gán ký tự ổ đĩa mạng (Map Drive Z:)</div>
+                  <div class="mode-desc">Gán một thư mục chia sẻ cụ thể thành ổ đĩa Z: trực tiếp trong This PC.</div>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Share input only when Drive mode is selected -->
+            <div id="shareConfigContainer" style="display: none; margin-top: 10px; background: #f8fafc; border: 1.5px dashed var(--slate-300); border-radius: 10px; padding: 12px 14px;">
+              <div class="config-item">
+                <label style="color: var(--primary); font-size: 11.5px; font-weight: 700;">📁 Tên thư mục chia sẻ gán vào ổ Z:</label>
+                <input type="text" id="cfgShare" value="HT_DATA" placeholder="Ví dụ: HT_DATA, HT_WORK, home..." oninput="updateAllCommands()" style="background: white;">
+                <span style="font-size: 12px; color: var(--slate-600); margin-top: 4px;">Ổ đĩa Z: trong This PC sẽ kết nối trực tiếp tới thư mục chia sẻ này.</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="tabs-header">
+        <button class="tab-btn active" onclick="switchTab('win11')">
+          🪟 Windows 11 (Lệnh trực tiếp)
+        </button>
+        <button class="tab-btn" onclick="switchTab('win10')">
+          💻 Windows 10 (Dùng RaiDrive)
+        </button>
+        <button class="tab-btn" onclick="switchTab('macos')">
+          🍎 macOS (MacBook)
+        </button>
+        <button class="tab-btn" onclick="switchTab('mobile')">
+          📱 iPhone / Android
+        </button>
+      </div>
+
+      <!-- TAB 1: WINDOWS 11 -->
+      <div id="tab-win11" class="tab-pane active">
+        <div class="step-list">
+          
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <div class="step-title">Mở cửa sổ Terminal hoặc PowerShell</div>
+              <div class="step-desc">
+                Nhấn tổ hợp phím <strong>Windows + X</strong> trên bàn phím, sau đó bấm chọn <strong>Terminal</strong> (hoặc <strong>PowerShell</strong>).
+              </div>
+              <div class="alert alert-warning">
+                ⚠️ <strong>Lưu ý quan trọng:</strong> Hãy mở Terminal/CMD <strong>bình thường</strong> (KHÔNG chọn <em>"Run as administrator / Chạy với quyền quản trị viên"</em>). Nếu chạy bằng quyền Admin, cơ chế bảo mật UAC của Windows sẽ giấu ổ đĩa khỏi File Explorer thông thường.
+              </div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <div class="step-title">Dán lệnh kết nối tự động (Chỉ cần làm 1 lần)</div>
+              <div class="step-desc">Bấm nút <strong>Sao chép</strong> dưới đây, sau đó bấm chuột phải vào cửa sổ Terminal để dán và nhấn <strong>Enter</strong>:</div>
+              
+              <!-- Clean Terminal Block (No overlap) -->
+              <div class="code-box">
+                <div class="code-topbar">
+                  <div class="code-tag"><span class="code-dot"></span>PowerShell / CMD</div>
+                  <button class="copy-btn" onclick="copyCode('cmdWin11')">📋 Sao chép lệnh</button>
+                </div>
+                <div class="code-text" id="cmdWin11">net use \\data.kientrucht.com\HT_DATA /TCPPORT:4450 /USER:smb_user smb_p@ssw0rd /PERSISTENT:YES</div>
+              </div>
+
+              <div class="alert alert-tip">
+                💡 <strong>Tự động đồng bộ:</strong> Mật khẩu bạn nhập ở bảng cấu hình phía trên đã được tự động điền sẵn vào lệnh. Bạn chỉ cần bấm <strong>Sao chép lệnh</strong> và dán là hoàn tất!
+              </div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <div class="step-title" id="step3Title">Hoàn tất! Mở thư mục làm việc trực tiếp</div>
+              <div class="step-desc" id="step3Desc">
+                Nhấn tổ hợp phím <strong>Windows + R</strong> &gt; dán đường dẫn dưới đây và nhấn <strong>Enter</strong>:
+              </div>
+
+              <div class="code-box" id="boxUncPath">
+                <div class="code-topbar">
+                  <div class="code-tag"><span class="code-dot"></span>Đường dẫn mạng UNC</div>
+                  <button class="copy-btn" onclick="copyCode('uncPathLink')">📋 Sao chép đường dẫn</button>
+                </div>
+                <div class="code-text" id="uncPathLink">\\data.kientrucht.com\HT_DATA</div>
+              </div>
+
+              <div class="alert alert-info" id="alertShortcutTip">
+                💡 <strong>Mẹo tiện lợi:</strong> Bạn có thể nhấp chuột phải ngoài màn hình Desktop chọn <strong>New &gt; Shortcut</strong> và dán đường dẫn trên để tạo lối tắt mở nhanh mỗi ngày mà không lo virus quét mã hóa ổ đĩa!
+              </div>
+
+              <div class="mockup-box" id="step3Mockup">
+                🛡️ <strong>Chế độ an toàn cao:</strong> Không gán ký tự ổ đĩa (Z:, Y:). Mã độc tống tiền (Ransomware) quét ổ đĩa cục bộ thông thường sẽ không quét tới thư mục mạng này.
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- TAB 2: WINDOWS 10 -->
+      <div id="tab-win10" class="tab-pane">
+        <div class="alert alert-info">
+          💡 <strong>Dành riêng cho Windows 10:</strong> Do Windows 10 bị Microsoft khóa cứng cổng 445 (chưa có tính năng đổi cổng bằng lệnh như Win 11), giải pháp nhẹ nhàng và chuẩn nhất là dùng ứng dụng <strong>RaiDrive (Miễn phí 100%)</strong>. Phần mềm này cực kỳ nhẹ, không tốn tài nguyên máy tính, tự động tạo <strong>ổ đĩa Z:</strong> trong <em>This PC</em> và tự kết nối lại mỗi khi khởi động máy!
+        </div>
+
+        <div class="step-list" style="margin-top: 16px;">
+          
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <div class="step-title">Tải và cài đặt RaiDrive (Bản miễn phí)</div>
+              <div class="step-desc">
+                Bấm vào nút xanh bên dưới để tải RaiDrive trực tiếp từ trang chủ chính thức, sau đó mở file tải về và bấm <strong>Install</strong> để hoàn tất:
+              </div>
+              <a href="https://www.raidrive.com/download" target="_blank" rel="noopener noreferrer" class="btn-download" style="text-decoration: none;">
+                <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                Tải RaiDrive Standard (Miễn phí)
+              </a>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <div class="step-title">Mở RaiDrive và thêm kết nối mới</div>
+              <div class="step-desc">
+                1. Mở ứng dụng <strong>RaiDrive</strong> vừa cài đặt.<br>
+                2. Nhìn lên góc trên bên phải, bấm vào nút <strong>+ Thêm (+ Add)</strong>.<br>
+                3. Chọn thẻ <strong>NAS</strong> ở giữa &gt; chọn mục <strong>SMB</strong>.<br>
+                4. Chọn ký tự ổ đĩa muốn hiển thị: <strong>Z:</strong> (hoặc ký tự bất kỳ bạn muốn).
+              </div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <div class="step-title">Điền thông số kết nối (Tự động cập nhật)</div>
+              <div class="step-desc">
+                Điền các thông số dưới đây vào bảng cài đặt của RaiDrive (bạn có thể bấm nút <strong>📋 Chép</strong> để dán nhanh):
+              </div>
+
+              <div style="background: white; border: 1.5px solid var(--slate-300); border-radius: 10px; overflow: hidden; margin-top: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+                <div style="background: #f1f5f9; padding: 9px 14px; font-weight: 700; font-size: 12.5px; color: var(--slate-800); border-bottom: 1px solid var(--slate-300); display: flex; justify-content: space-between; align-items: center;">
+                  <span>📋 THÔNG SỐ CÀI ĐẶT TRÊN RAIDRIVE</span>
+                  <span style="font-size: 11px; color: var(--primary); font-weight: 700;">ĐÃ TỰ ĐỘNG ĐỒNG BỘ</span>
+                </div>
+                <div style="padding: 14px; display: flex; flex-direction: column; gap: 12px; font-size: 13.5px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--slate-200); padding-bottom: 8px;">
+                    <div><strong>Địa chỉ (Host / Address):</strong> <code id="rdHost" style="color: var(--primary); font-weight: 700; font-size: 14px;">data.kientrucht.com</code></div>
+                    <button class="copy-btn" onclick="copyCode('rdHost')" style="padding: 3px 9px; font-size: 12px;">📋 Chép</button>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--slate-200); padding-bottom: 8px;">
+                    <div><strong>Cổng (Port):</strong> <code id="rdPort" style="color: var(--primary); font-weight: 700; font-size: 14px;">4450</code></div>
+                    <button class="copy-btn" onclick="copyCode('rdPort')" style="padding: 3px 9px; font-size: 12px;">📋 Chép</button>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--slate-200); padding-bottom: 8px;">
+                    <div><strong>Tài khoản (Account / User):</strong> <code id="rdUser" style="color: var(--slate-800); font-weight: 700; font-size: 14px;">smb_user</code></div>
+                    <button class="copy-btn" onclick="copyCode('rdUser')" style="padding: 3px 9px; font-size: 12px;">📋 Chép</button>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--slate-200); padding-bottom: 8px;">
+                    <div><strong>Mật khẩu (Password):</strong> <code id="rdPass" style="color: var(--slate-800); font-weight: 700; font-size: 14px;">smb_p@ssw0rd</code></div>
+                    <button class="copy-btn" onclick="copyCode('rdPass')" style="padding: 3px 9px; font-size: 12px;">📋 Chép</button>
+                  </div>
+                  <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div><strong>Thư mục (Folder):</strong> <code id="rdFolder" style="color: #059669; font-weight: 700; font-size: 14px;">/</code> <span style="color: var(--slate-500); font-size: 12px;">(Để dấu <strong>/</strong> để mở toàn bộ thư mục)</span></div>
+                    <button class="copy-btn" onclick="copyCode('rdFolderVal')" style="padding: 3px 9px; font-size: 12px;">📋 Chép</button>
+                    <span id="rdFolderVal" style="display: none;">/</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="step-desc" style="margin-top: 12px;">
+                Sau khi điền đủ các mục trên, nhấn nút <strong>Kết nối (Connect)</strong> ở dưới cùng.
+              </div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <div class="step-title">Hoàn tất! Ổ đĩa Z: đã sẵn sàng trong This PC</div>
+              <div class="step-desc">
+                Mở <strong>File Explorer</strong> (phím <strong>Windows + E</strong>) &gt; vào <strong>This PC</strong>, bạn sẽ thấy ngay ổ đĩa mạng mang ký tự <strong>Z:</strong> xuất hiện hệt như một ổ cứng thật.
+              </div>
+              <div class="mockup-box">
+                ✨ <strong>Ưu điểm khi dùng RaiDrive trên Windows 10:</strong><br>
+                &bull; <strong>Cực kỳ nhẹ máy:</strong> Tốn rất ít RAM và CPU, máy chạy mượt mà không lo đơ giật.<br>
+                &bull; <strong>Tự động kết nối:</strong> Mỗi khi bật máy tính, RaiDrive sẽ tự động kết nối lại ổ đĩa Z: mà không cần thao tác lại.<br>
+                &bull; <strong>Mở toàn bộ thư mục:</strong> Bạn có thể duyệt và chỉnh sửa đồng thời các thư mục chung <code>HT_DATA</code>, <code>HT_WORK</code>... rất tiện lợi.
+              </div>
+              <div class="alert alert-tip" style="margin-top: 10px;">
+                💡 <strong>Tiện lợi &amp; Bảo mật:</strong> Hướng dẫn này áp dụng thống nhất cho toàn bộ nhân viên dù đang làm việc tại văn phòng hay làm việc từ xa tại nhà. Chỉ cần máy tính có Internet là kết nối trực tiếp vào dữ liệu công ty mà không cần cài đặt VPN phức tạp!
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- TAB 3: MACOS -->
+      <div id="tab-macos" class="tab-pane">
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <div class="step-title">Mở công cụ Kết Nối Máy Chủ trong Finder</div>
+              <div class="step-desc">
+                Trên máy Mac, mở ứng dụng <strong>Finder</strong> &gt; nhìn lên thanh menu trên cùng chọn <strong>Go</strong> (Đi) &gt; chọn <strong>Connect to Server...</strong> (Kết nối với máy chủ...) hoặc nhấn phím tắt <strong>Command (⌘) + K</strong>.
+              </div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <div class="step-title">Dán địa chỉ máy chủ SMB</div>
+              <div class="step-desc">Sao chép địa chỉ bên dưới và dán vào ô <strong>Server Address</strong>:</div>
+              <div class="code-box">
+                <div class="code-topbar">
+                  <div class="code-tag"><span class="code-dot"></span>Địa chỉ máy chủ macOS</div>
+                  <button class="copy-btn" onclick="copyCode('cmdMac')">📋 Sao chép</button>
+                </div>
+                <div class="code-text" id="cmdMac">smb://data.kientrucht.com:4450/HT_DATA</div>
+              </div>
+              <div class="step-desc">Nhấn dấu cộng (<strong>+</strong>) để lưu vào danh sách yêu thích, sau đó nhấn <strong>Connect</strong>.</div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <div class="step-title">Xác thực tài khoản</div>
+              <div class="step-desc">
+                Chọn mục <strong>Registered User</strong> (Người dùng đã đăng ký) &gt; Điền Name: <strong id="lblMacUser">smb_user</strong> và Password: <strong id="lblMacPass">smb_p@ssw0rd</strong> &gt; Tích chọn <strong>Remember this password in my keychain</strong> để lần sau tự động vào.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: MOBILE -->
+      <div id="tab-mobile" class="tab-pane">
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num">🍏</div>
+            <div class="step-content">
+              <div class="step-title">Dành cho iPhone / iPad (Có sẵn không cần cài app)</div>
+              <div class="step-desc">
+                1. Mở ứng dụng <strong>Tệp (Files)</strong> có sẵn trên iPhone.<br>
+                2. Bấm vào nút <strong>dấu 3 chấm (...)</strong> ở góc trên bên phải &gt; chọn <strong>Kết nối với máy chủ (Connect to Server)</strong>.<br>
+                3. Nhập địa chỉ: <code id="cmdIos">data.kientrucht.com:4450</code> (hoặc <code id="cmdIosSmb">smb://data.kientrucht.com:4450</code>).<br>
+                4. Chọn <strong>Người dùng đã đăng ký</strong> &gt; Nhập Tài khoản: <strong id="lblMobileUser">smb_user</strong> và Mật khẩu: <strong id="lblMobilePass">smb_p@ssw0rd</strong>.
+              </div>
+            </div>
+          </div>
+
+          <div class="step-item">
+            <div class="step-num">🤖</div>
+            <div class="step-content">
+              <div class="step-title">Dành cho điện thoại Android</div>
+              <div class="step-desc">
+                1. Vào Google Play Store tải ứng dụng quản lý tệp tin (khuyên dùng <strong>CX File Explorer</strong> hoặc <strong>Solid Explorer</strong>).<br>
+                2. Trong ứng dụng, chuyển sang tab <strong>Network (Mạng)</strong> &gt; chọn <strong>New location (+)</strong> &gt; chọn <strong>SMB</strong>.<br>
+                3. Nhập Host: <code id="cmdAndroidHost">data.kientrucht.com</code>, Port: <code id="cmdAndroidPort">4450</code>.<br>
+                4. Điền Tài khoản: <strong id="lblAndroidUser">smb_user</strong> và Mật khẩu: <strong id="lblAndroidPass">smb_p@ssw0rd</strong> để duyệt file.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Troubleshooting FAQ -->
+    <div class="card">
+      <div class="faq-title">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+        Hỏi Đáp & Xử Lý Sự Cố Thường Gặp
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">❓ Tại sao không nên gán ký tự ổ đĩa (Z:, Y:) mà nên truy cập qua đường dẫn trực tiếp UNC?</div>
+        <div class="faq-a">
+          <strong>1. Mở được toàn bộ các thư mục cùng lúc:</strong> Khi dùng chế độ trực tiếp (UNC), bạn chỉ cần kết nối tới <code>\\data.kientrucht.com</code> là sẽ thấy toàn bộ danh sách các thư mục dùng chung của công ty (như <code>HT_DATA</code>, <code>HT_WORK</code>, <code>home</code>...) cùng lúc. Bạn không phải gán nhiều chữ cái ổ đĩa lộn xộn trong máy.<br><br>
+          <strong>2. An ninh mạng & Chống Virus/Ransomware:</strong> Hầu hết các loại virus mã độc tống tiền khi lây vào máy tính sẽ tự động quét danh sách các ổ đĩa từ <code>A:</code> đến <code>Z:</code> để mã hóa toàn bộ dữ liệu. Khi bạn <strong>KHÔNG gán ký tự ổ đĩa</strong>, các loại mã độc cục bộ thông thường sẽ không quét tới, giúp dữ liệu công ty được bảo vệ tối đa!
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">❓ Tôi chạy lệnh báo thành công ("The command completed successfully") nhưng không thấy ổ Z: trong This PC?</div>
+        <div class="faq-a">
+          <strong>Nguyên nhân:</strong> Do bạn đã mở cửa sổ Terminal/CMD bằng quyền <em>"Run as administrator"</em> (dấu nhắc lệnh hiện là <code>C:\Windows\System32&gt;</code>). Cơ chế bảo mật UAC của Windows cách ly ổ đĩa tạo bởi quyền Quản trị viên khỏi giao diện File Explorer thông thường của bạn.<br><br>
+          <strong>Cách xử lý:</strong> Rất đơn giản, hãy đóng cửa sổ đó lại &gt; bấm phím <strong>Windows</strong> &gt; gõ <strong>cmd</strong> hoặc <strong>powershell</strong> và bấm <strong>Enter</strong> để mở ở chế độ bình thường (dấu nhắc lệnh sẽ là <code>C:\Users\...&gt;</code>) &gt; dán lại lệnh <code>net use Z: ...</code>. Ổ đĩa Z: sẽ hiện ra ngay lập tức trong This PC!
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">❓ Tại sao trên Windows 10 lại dùng RaiDrive thay vì chạy lệnh như Windows 11?</div>
+        <div class="faq-a">
+          <strong>Lý do kỹ thuật:</strong> Tính năng tùy biến cổng kết nối SMB (<code>/TCPPORT:</code>) chỉ vừa được Microsoft bổ sung trên Windows 11 (24H2). Windows 10 bị Microsoft khóa cứng cổng 445 nên không thể đổi cổng bằng dòng lệnh.<br><br>
+          Nâng cấp lên Windows 11 thường nặng máy và tốn RAM/CPU cho các máy tính văn phòng. Do đó, dùng <strong>RaiDrive (Miễn phí 100%)</strong> là giải pháp hoàn hảo nhất cho Windows 10: ứng dụng cực kỳ nhẹ máy, hỗ trợ nhập thẳng cổng 4450 và tự động gán ổ đĩa Z: vĩnh viễn trong This PC.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">❓ Tôi muốn ngắt kết nối (Disconnect) ổ đĩa Z: thì làm thế nào?</div>
+        <div class="faq-a">
+          Rất đơn giản! Bạn chỉ cần mở <strong>File Explorer</strong> &gt; chọn <strong>This PC</strong> <em>(Máy tính này)</em> &gt; <strong>Nhấp chuột phải</strong> vào ổ đĩa <code>home (Z:)</code> &gt; chọn <strong>Disconnect</strong> <em>(Ngắt kết nối)</em>.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">❓ Khởi động lại máy tính có bị mất ổ đĩa không?</div>
+        <div class="faq-a">
+          <strong>Không!</strong> Lệnh cài đặt đã bao gồm tham số <code>/PERSISTENT:YES</code>, giúp Windows tự động ghi nhớ và kết nối lại ổ đĩa mỗi khi bạn mở máy tính.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">❓ Báo lỗi "System error 1326 has occurred. Logon failure: unknown user name or bad password"?</div>
+        <div class="faq-a">
+          Lỗi này do bạn nhập sai <strong>Username</strong> hoặc <strong>Password</strong>. Hãy kiểm tra lại phím Caps Lock và mật khẩu chính xác được quản trị viên cấp.
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <div class="faq-q">❓ Tôi đổi mật khẩu tài khoản thì cập nhật ở đâu trên Windows?</div>
+        <div class="faq-a">
+          Do Windows có thể cài ngôn ngữ <strong>Tiếng Việt</strong> hoặc <strong>Tiếng Anh</strong>, việc tìm kiếm chữ <em>"Credential Manager"</em> trong menu Start sẽ không ra kết quả trên Windows tiếng Việt. Cách chuẩn và nhanh nhất áp dụng cho <strong>mọi phiên bản Windows</strong> là:
+          <ol style="margin-top: 8px; margin-left: 20px; line-height: 1.8;">
+            <li>Nhấn phím tắt <strong>Windows + R</strong> (mở hộp thoại Run).</li>
+            <li>Dán lệnh dưới đây vào ô rồi nhấn <strong>Enter</strong>:
+              <div class="code-box" style="margin-top: 6px; margin-bottom: 8px;">
+                <div class="code-topbar">
+                  <div class="code-tag"><span class="code-dot"></span>Mở trình quản lý mật khẩu</div>
+                  <button class="copy-btn" onclick="copyCode('cmdKeymgr')">📋 Sao chép</button>
+                </div>
+                <div class="code-text" id="cmdKeymgr">control keymgr.dll</div>
+              </div>
+            </li>
+            <li>Cửa sổ mở ra, bấm chọn thẻ <strong>Windows Credentials</strong> <em>(hoặc "Thông tin xác thực Windows")</em> &gt; tìm dòng máy chủ <code id="lblDomainCred">data.kientrucht.com</code> &gt; nhấn <strong>Edit</strong> <em>(Chỉnh sửa)</em> để nhập mật khẩu mới.</li>
+          </ol>
+          <div class="alert alert-tip" style="margin-top: 10px;">
+            💡 <strong>Mẹo xóa mật khẩu cũ trong 1 giây (Khuyên dùng):</strong> Bạn chỉ cần mở Terminal hoặc PowerShell và dán lệnh bên dưới để xóa thông tin cũ. Lần mở ổ đĩa tiếp theo, Windows sẽ tự động hiện hộp thoại để bạn nhập mật khẩu mới:
+            <div class="code-box" style="margin-top: 6px; margin-bottom: 0;">
+              <div class="code-topbar">
+                <div class="code-tag"><span class="code-dot"></span>Xóa mật khẩu đã lưu</div>
+                <button class="copy-btn" onclick="copyCode('cmdResetPass')">📋 Sao chép</button>
+              </div>
+              <div class="code-text" id="cmdResetPass">cmdkey /delete:data.kientrucht.com</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Hệ thống Lưu Trữ &amp; Bảo Mật KienTrucHT Gateway &bull; Hỗ trợ kỹ thuật: IT Admin
+    </footer>
+
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"></path></svg>
+    <span>Đã sao chép vào bộ nhớ tạm!</span>
+  </div>
+
+  <script>
+    function togglePassVisibility() {
+      const passInput = document.getElementById('cfgPass');
+      const eyeIcon = document.getElementById('eyeIcon');
+      if (passInput.type === 'password') {
+        passInput.type = 'text';
+        eyeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path>`;
+      } else {
+        passInput.type = 'password';
+        eyeIcon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>`;
+      }
+    }
+
+    function selectMode(mode) {
+      document.getElementById('radioUnc').checked = (mode === 'unc');
+      document.getElementById('radioDrive').checked = (mode === 'drive');
+      document.getElementById('cardModeUnc').classList.toggle('selected', mode === 'unc');
+      document.getElementById('cardModeDrive').classList.toggle('selected', mode === 'drive');
+      updateAllCommands();
+    }
+
+    function updateAllCommands() {
+      const domain = document.getElementById('cfgDomain').value.trim() || 'data.kientrucht.com';
+      const port = document.getElementById('cfgPort').value.trim() || '4450';
+      const share = document.getElementById('cfgShare').value.trim() || 'HT_DATA';
+      const user = document.getElementById('cfgUser').value.trim() || 'smb_user';
+      const pass = document.getElementById('cfgPass').value || 'smb_p@ssw0rd';
+      const isDriveMode = document.getElementById('radioDrive').checked;
+
+      // Update card UI classes & toggle share input visibility
+      document.getElementById('cardModeUnc').classList.toggle('selected', !isDriveMode);
+      document.getElementById('cardModeDrive').classList.toggle('selected', isDriveMode);
+      const shareBox = document.getElementById('shareConfigContainer');
+      if (shareBox) {
+        shareBox.style.display = isDriveMode ? 'block' : 'none';
+      }
+
+      // Safe password quoting
+      const safePass = (pass.includes(' ') || pass.includes('&') || pass.includes('^')) ? `"${pass}"` : pass;
+
+      // Win 11
+      if (isDriveMode) {
+        document.getElementById('cmdWin11').innerText = 
+          `net use Z: \\\\${domain}\\${share} /TCPPORT:${port} /USER:${user} ${safePass} /PERSISTENT:YES`;
+      } else {
+        document.getElementById('cmdWin11').innerText = 
+          `net use \\\\${domain} /TCPPORT:${port} /USER:${user} ${safePass} /PERSISTENT:YES`;
+      }
+
+      // Update Step 3 instructions based on mode
+      const step3Title = document.getElementById('step3Title');
+      const step3Desc = document.getElementById('step3Desc');
+      const boxUncPath = document.getElementById('boxUncPath');
+      const alertShortcutTip = document.getElementById('alertShortcutTip');
+      const step3Mockup = document.getElementById('step3Mockup');
+
+      if (isDriveMode) {
+        if (step3Title) step3Title.innerText = "Hoàn tất! Mở ổ đĩa mạng Z:";
+        if (step3Desc) step3Desc.innerHTML = `Mở <strong>File Explorer</strong> (phím <strong>Windows + E</strong>) &gt; vào mục <strong>This PC</strong> <em>(Máy tính này)</em>. Bạn sẽ thấy ngay ổ đĩa mạng mang tên <strong>${share} (Z:)</strong> xuất hiện.`;
+        if (boxUncPath) boxUncPath.style.display = 'none';
+        if (alertShortcutTip) alertShortcutTip.style.display = 'none';
+        if (step3Mockup) step3Mockup.innerHTML = `📁 <strong>Network locations (Vị trí mạng):</strong><br>└─ <strong>${share} (\\\\${domain}:${port}) (Z:)</strong> — Sẵn sàng sử dụng!`;
+      } else {
+        if (step3Title) step3Title.innerText = "Hoàn tất! Mở máy chủ để thấy tất cả các thư mục chia sẻ";
+        if (step3Desc) step3Desc.innerHTML = `Nhấn tổ hợp phím <strong>Windows + R</strong> &gt; dán đường dẫn dưới đây và nhấn <strong>Enter</strong>:`;
+        if (boxUncPath) boxUncPath.style.display = 'block';
+        if (alertShortcutTip) {
+          alertShortcutTip.style.display = 'block';
+          alertShortcutTip.innerHTML = `💡 <strong>Mẹo tiện lợi:</strong> Cửa sổ mở ra sẽ hiển thị <strong>toàn bộ các thư mục chia sẻ</strong> của công ty (HT_DATA, HT_WORK...). Bạn có thể nhấp chuột phải ngoài Desktop chọn <strong>New &gt; Shortcut</strong> và dán <code>\\\\${domain}</code> để tạo lối tắt truy cập nhanh mỗi ngày!`;
+        }
+        document.getElementById('uncPathLink').innerText = `\\\\${domain}`;
+        if (step3Mockup) step3Mockup.innerHTML = `🛡️ <strong>Chế độ an toàn & linh hoạt:</strong> Không gán ký tự ổ đĩa (Z:, Y:). Vừa chống virus mã hóa ổ đĩa (Ransomware), vừa mở được tất cả các thư mục làm việc chung cùng một lúc.`;
+      }
+
+      // Win 10 RaiDrive
+      if (document.getElementById('rdHost')) document.getElementById('rdHost').innerText = domain;
+      if (document.getElementById('rdPort')) document.getElementById('rdPort').innerText = port;
+      if (document.getElementById('rdUser')) document.getElementById('rdUser').innerText = user;
+      if (document.getElementById('rdPass')) document.getElementById('rdPass').innerText = pass;
+      const folderVal = isDriveMode ? `/${share}` : `/`;
+      if (document.getElementById('rdFolder')) {
+        document.getElementById('rdFolder').innerText = isDriveMode ? `/${share}` : `/ (Mở tất cả thư mục)`;
+      }
+      if (document.getElementById('rdFolderVal')) {
+        document.getElementById('rdFolderVal').innerText = folderVal;
+      }
+
+      // Mac
+      if (isDriveMode) {
+        document.getElementById('cmdMac').innerText = `smb://${domain}:${port}/${share}`;
+      } else {
+        document.getElementById('cmdMac').innerText = `smb://${domain}:${port}`;
+      }
+      if (document.getElementById('lblMacUser')) document.getElementById('lblMacUser').innerText = user;
+      if (document.getElementById('lblMacPass')) document.getElementById('lblMacPass').innerText = pass;
+
+      // Mobile
+      document.getElementById('cmdIos').innerText = `${domain}:${port}`;
+      document.getElementById('cmdIosSmb').innerText = `smb://${domain}:${port}`;
+      document.getElementById('cmdAndroidHost').innerText = domain;
+      document.getElementById('cmdAndroidPort').innerText = port;
+      if (document.getElementById('lblMobileUser')) document.getElementById('lblMobileUser').innerText = user;
+      if (document.getElementById('lblMobilePass')) document.getElementById('lblMobilePass').innerText = pass;
+      if (document.getElementById('lblAndroidUser')) document.getElementById('lblAndroidUser').innerText = user;
+      if (document.getElementById('lblAndroidPass')) document.getElementById('lblAndroidPass').innerText = pass;
+
+      // Password Reset & Credential
+      if (document.getElementById('cmdResetPass')) {
+        document.getElementById('cmdResetPass').innerText = `cmdkey /delete:${domain}`;
+      }
+      if (document.getElementById('lblDomainCred')) {
+        document.getElementById('lblDomainCred').innerText = domain;
+      }
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.remove('active'));
+
+      event.currentTarget.classList.add('active');
+      document.getElementById('tab-' + tabId).classList.add('active');
+    }
+
+    function copyCode(elementId) {
+      const text = document.getElementById(elementId).innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Đã sao chép lệnh thành công!");
+      }).catch(err => {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+        showToast("Đã sao chép lệnh thành công!");
+      });
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.querySelector('span').innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2500);
+    }
+
+    function downloadBatFile() {
+      const domain = document.getElementById('cfgDomain').value.trim() || 'data.kientrucht.com';
+      const port = document.getElementById('cfgPort').value.trim() || '4450';
+      const share = document.getElementById('cfgShare').value.trim() || 'HT_DATA';
+      const user = document.getElementById('cfgUser').value.trim() || 'smb_user';
+      const pass = document.getElementById('cfgPass').value || 'smb_p@ssw0rd';
+      const isDriveMode = document.getElementById('radioDrive').checked;
+
+      const driveAuthCmd = isDriveMode 
+        ? `net use Z: \\\\127.0.0.2\\${share} /USER:${user} "${pass}" /PERSISTENT:YES >nul 2>&1`
+        : `net use \\\\127.0.0.2 /USER:${user} "${pass}" /PERSISTENT:YES >nul 2>&1`;
+      const openCmd = isDriveMode ? 'explorer Z:' : `explorer \\\\127.0.0.2`;
+
+      const batContent = `@echo off
+chcp 65001 >nul
+echo ========================================================
+echo   DANG KET NOI O DIA DU LIEU KIENTRUCHT CLOUD (WIN 10)
+echo ========================================================
+echo.
+
+:: Kiem tra quyen Admin
+net session >nul 2>&1
+if %errorLevel% neq 0 (
+    echo [!] BAN CAN CHAY FILE NAY VOI QUYEN ADMINISTRATOR!
+    echo     Hay nhap chuot phai vao file va chon "Run as administrator".
+    echo.
+    pause
+    exit /b
+)
+
+echo [*] Dang tao cong chuyen tiep noi bo (PortProxy)...
+netsh interface portproxy delete v4tov4 listenport=445 listenaddress=127.0.0.2 >nul 2>&1
+netsh interface portproxy add v4tov4 listenport=445 listenaddress=127.0.0.2 connectport=${port} connectaddress=${domain}
+
+echo [*] Chuyen tiep thanh cong toi ${domain}:${port}!
+echo [*] Dang xac thuc tai khoan ${user}...
+${driveAuthCmd}
+
+echo.
+echo [*] Dang mo thu muc chia se...
+${openCmd}
+
+echo.
+echo [V] DA KET NOI THANH CONG!
+echo.
+pause
+`;
+
+      const blob = new Blob([batContent], { type: 'application/bat' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'KetNoi_ODia_KienTrucHT.bat';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast("Đang tải file KetNoi_ODia_KienTrucHT.bat...");
+    }
+
+    // Init
+    updateAllCommands();
+  </script>
+</body>
+</html>

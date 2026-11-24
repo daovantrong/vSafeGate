@@ -1,0 +1,23 @@
+{
+    order coraza_waf first
+}
+
+:80 {
+    # Kích hoạt Coraza WAF với bộ custom rules
+    coraza_waf {
+        load_owasp_crs
+        directives `
+            Include /etc/caddy/rules/custom-rules.conf
+        `
+    }
+
+    # Trang phản hồi mẫu khi vượt qua WAF an toàn
+    handle {
+        respond "<h1>vSafeGate Protection Active</h1><p>Request verified and allowed by vSafeGate.</p>" 200 {
+            close
+        }
+    }
+
+    # Hoặc chuyển tiếp (Reverse Proxy) về ứng dụng backend thật:
+    # reverse_proxy http://10.20.30.254:3000
+}
