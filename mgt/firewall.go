@@ -73,11 +73,17 @@ func (s *AppState) applyIptablesRules() {
 
 	// 8. GeoIP Filtering: Never drop internal, loopback, or VPN interfaces
 	if mode == "whitelist" {
+		exec.Command("sh", "-c", "iptables -D INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m set --match-set vsafegate-countries src -j DROP 2>/dev/null").Run()
 		exec.Command("sh", "-c", "iptables -D INPUT -m set --match-set vsafegate-countries src -j DROP 2>/dev/null").Run()
 		exec.Command("sh", "-c", "iptables -C INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m conntrack --ctstate NEW -m set ! --match-set vsafegate-allowed src -j DROP 2>/dev/null || iptables -A INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m conntrack --ctstate NEW -m set ! --match-set vsafegate-allowed src -j DROP").Run()
-	} else {
+	} else if mode == "blacklist" {
 		exec.Command("sh", "-c", "iptables -D INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m conntrack --ctstate NEW -m set ! --match-set vsafegate-allowed src -j DROP 2>/dev/null").Run()
 		exec.Command("sh", "-c", "iptables -C INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m set --match-set vsafegate-countries src -j DROP 2>/dev/null || iptables -A INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m set --match-set vsafegate-countries src -j DROP").Run()
+	} else {
+		// "disabled": remove both GeoIP drop rules, keep kernel open for global access
+		exec.Command("sh", "-c", "iptables -D INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m conntrack --ctstate NEW -m set ! --match-set vsafegate-allowed src -j DROP 2>/dev/null").Run()
+		exec.Command("sh", "-c", "iptables -D INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m set --match-set vsafegate-countries src -j DROP 2>/dev/null").Run()
+		exec.Command("sh", "-c", "iptables -D INPUT -m set --match-set vsafegate-countries src -j DROP 2>/dev/null").Run()
 	}
 
 	// 9. Management SSH (Ports 2251, 22222, and 22) - Protected by Blacklist & GeoIP
