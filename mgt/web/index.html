@@ -9,14 +9,104 @@
   <link rel="shortcut icon" href="/favicon.ico">
   <!-- Standalone Tailwind CSS (Production Compiled - 0 CDN, 0 Tracking) -->
   <link rel="stylesheet" href="/tailwind.min.css">
-  <!-- Standalone Chart.js & Lucide Icons (Embedded Local Assets) -->
+  <!-- Standalone Chart.js, Lucide Icons & i18n Engine (Embedded Local Assets) -->
   <script src="/chart.min.js"></script>
   <script src="/lucide.min.js"></script>
+  <script src="/i18n.js"></script>
   <style>
-    body { background-color: #0b0f19; color: #f3f4f6; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-    .glass { background: rgba(17, 24, 39, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.05); }
+    :root {
+      --bg-body: #0b0f19;
+      --text-body: #f3f4f6;
+      --bg-glass: rgba(17, 24, 39, 0.75);
+      --border-glass: rgba(255, 255, 255, 0.05);
+      --bg-card: #111827;
+      --border-dark: #1f2937;
+      --text-heading: #ffffff;
+      --text-muted: #9ca3af;
+    }
+
+    [data-theme="light"], html.light {
+      --bg-body: #f8fafc;
+      --text-body: #1e293b;
+      --bg-glass: rgba(255, 255, 255, 0.88);
+      --border-glass: rgba(0, 0, 0, 0.08);
+      --bg-card: #ffffff;
+      --border-dark: #e2e8f0;
+      --text-heading: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    body {
+      background-color: var(--bg-body);
+      color: var(--text-body);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      transition: background-color 0.25s ease, color 0.25s ease;
+    }
+    .glass {
+      background: var(--bg-glass);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-glass);
+      transition: background 0.25s ease, border-color 0.25s ease;
+    }
     .pulse-dot { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
+
+    /* Light Theme Styling Overrides */
+    [data-theme="light"] aside#main-sidebar {
+      background-color: #ffffff !important;
+      border-color: #e2e8f0 !important;
+    }
+    [data-theme="light"] .bg-cardBg {
+      background-color: #ffffff !important;
+    }
+    [data-theme="light"] .border-borderDark,
+    [data-theme="light"] .border-gray-800 {
+      border-color: #e2e8f0 !important;
+    }
+    [data-theme="light"] .bg-gray-900\/80,
+    [data-theme="light"] .bg-gray-900\/60,
+    [data-theme="light"] .bg-gray-900\/40,
+    [data-theme="light"] .bg-gray-900 {
+      background-color: #f8fafc !important;
+      color: #1e293b !important;
+    }
+    [data-theme="light"] .bg-gray-950\/80,
+    [data-theme="light"] .bg-gray-950 {
+      background-color: #f1f5f9 !important;
+      color: #0f172a !important;
+    }
+    [data-theme="light"] .text-white {
+      color: #0f172a !important;
+    }
+    [data-theme="light"] .text-gray-300,
+    [data-theme="light"] .text-gray-400 {
+      color: #475569 !important;
+    }
+    [data-theme="light"] .text-gray-500 {
+      color: #64748b !important;
+    }
+    [data-theme="light"] thead.bg-gray-900\/80 {
+      background-color: #f1f5f9 !important;
+      color: #475569 !important;
+    }
+    [data-theme="light"] tbody.divide-gray-800 > tr {
+      border-color: #f1f5f9 !important;
+    }
+    [data-theme="light"] .hover\:bg-gray-800\/30:hover,
+    [data-theme="light"] .hover\:bg-gray-800\/50:hover,
+    [data-theme="light"] .hover\:bg-gray-800:hover {
+      background-color: #f1f5f9 !important;
+    }
+    [data-theme="light"] input,
+    [data-theme="light"] select,
+    [data-theme="light"] textarea {
+      background-color: #ffffff !important;
+      color: #0f172a !important;
+      border-color: #cbd5e1 !important;
+    }
+    [data-theme="light"] .divide-gray-800 {
+      border-color: #e2e8f0 !important;
+    }
   </style>
 </head>
 <body class="min-h-screen">
@@ -114,27 +204,27 @@
         <nav class="p-3 space-y-1 overflow-y-auto flex-1">
           <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
             <i data-lucide="layout-dashboard" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0"></i>
-            <span class="truncate">Tổng Quan</span>
+            <span class="truncate" data-i18n="nav.dashboard">Tổng Quan</span>
           </button>
           <button onclick="switchTab('sites')" id="nav-sites" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition text-gray-400 hover:text-white hover:bg-gray-800/50">
             <i data-lucide="globe" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0"></i>
-            <span class="truncate">Website & Proxy</span>
+            <span class="truncate" data-i18n="nav.sites">Website & Proxy</span>
           </button>
           <button onclick="switchTab('l4')" id="nav-l4" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition text-gray-400 hover:text-white hover:bg-gray-800/50">
             <i data-lucide="network" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0"></i>
-            <span class="truncate">Dịch Vụ L4 (Gateway)</span>
+            <span class="truncate" data-i18n="nav.l4">Dịch Vụ L4</span>
           </button>
           <button onclick="switchTab('rules')" id="nav-rules" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition text-gray-400 hover:text-white hover:bg-gray-800/50">
             <i data-lucide="shield-check" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0"></i>
-            <span class="truncate">Quy Tắc Phòng Thủ</span>
+            <span class="truncate" data-i18n="nav.rules">Quy Tắc Phòng Thủ</span>
           </button>
           <button onclick="switchTab('ipmgmt')" id="nav-ipmgmt" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition text-gray-400 hover:text-white hover:bg-gray-800/50" title="Giám Sát Địa Chỉ IP">
             <i data-lucide="shield-alert" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0"></i>
-            <span class="truncate">Giám Sát Địa Chỉ IP</span>
+            <span class="truncate" data-i18n="nav.ipmgmt">Giám Sát Địa Chỉ IP</span>
           </button>
           <button onclick="switchTab('logs')" id="nav-logs" class="w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition text-gray-400 hover:text-white hover:bg-gray-800/50">
             <i data-lucide="list-filter" class="w-4 h-4 sm:w-5 sm:h-5 shrink-0"></i>
-            <span class="truncate">Nhật Ký Tấn Công</span>
+            <span class="truncate" data-i18n="nav.logs">Nhật Ký Tấn Công</span>
           </button>
         </nav>
       </div>
@@ -143,15 +233,15 @@
       <div class="p-3 border-t border-borderDark flex flex-col justify-between shrink-0 bg-cardBg">
         <div class="p-2.5 bg-gray-900/60 rounded-xl border border-gray-800 space-y-1.5">
           <div class="flex items-center justify-between text-xs">
-            <span class="text-gray-400">Trạng Thái Lõi</span>
+            <span class="text-gray-400" data-i18n="nav.core_status">Trạng Thái Lõi</span>
             <span class="flex items-center gap-1.5 text-emerald-400 font-medium text-[11px]">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> Đang Bảo Vệ
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot"></span> <span data-i18n="nav.protecting">Đang Bảo Vệ</span>
             </span>
           </div>
-          <div id="core-runtime-badge" class="text-[10px] text-gray-500 font-mono">OpenRC Native (0 Docker)</div>
+          <div id="core-runtime-badge" class="text-[10px] text-gray-500 font-mono">Native Linux (0 Docker)</div>
           <button onclick="reloadCaddy()" class="w-full mt-1 py-1.5 px-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-medium flex items-center justify-center space-x-1.5 transition shadow shadow-emerald-600/30">
             <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span>Nạp Lại Quy Tắc</span>
+            <span data-i18n="nav.reload_rules">Nạp Lại Quy Tắc</span>
           </button>
         </div>
         <div class="mt-3 pt-2 text-center border-t border-gray-800/60 text-[11px] text-gray-500 font-medium tracking-wide">
@@ -177,6 +267,17 @@
         </div>
 
         <div class="flex items-center space-x-2 sm:space-x-2.5 shrink-0">
+          <!-- Language Switcher -->
+          <button onclick="toggleLanguage()" id="btn-lang-toggle" class="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-gray-900 border border-gray-800 text-xs text-gray-300 hover:text-white hover:border-gray-700 transition" title="Chuyển đổi ngôn ngữ / Switch Language">
+            <i data-lucide="languages" class="w-3.5 h-3.5 text-cyan-400"></i>
+            <span id="current-lang-label" class="font-bold font-mono text-[11px]">🇻🇳 VI</span>
+          </button>
+
+          <!-- Theme Switcher -->
+          <button onclick="toggleTheme()" id="theme-toggle-btn" class="p-1.5 bg-gray-900 border border-gray-800 hover:border-gray-700 text-gray-300 hover:text-white rounded-lg transition" title="Đổi giao diện Sáng / Tối">
+            <i id="theme-icon" data-lucide="sun" class="w-3.5 h-3.5 text-amber-400"></i>
+          </button>
+
           <!-- SSL Badge -->
           <div class="hidden sm:flex items-center space-x-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-medium">
             <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
@@ -211,12 +312,12 @@
             <div>
               <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
                 <i data-lucide="layout-dashboard" class="w-5 h-5 text-emerald-400 shrink-0"></i>
-                <span>Bảng Điều Khiển Tổng Quan (Dashboard)</span>
+                <span data-i18n="dashboard.title">Bảng Điều Khiển Tổng Quan (Dashboard)</span>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 whitespace-nowrap shrink-0">
-                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot mr-1"></span> Live (Alpine Linux)
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 pulse-dot mr-1"></span> <span data-i18n="dashboard.badge_live">Live Telemetry</span>
                 </span>
               </h3>
-              <p class="text-xs text-gray-400 mt-0.5">Giám sát tải phần cứng máy chủ, lưu lượng mạng và các cơ chế phòng thủ tự động</p>
+              <p class="text-xs text-gray-400 mt-0.5" data-i18n="dashboard.subtitle">Giám sát tải phần cứng máy chủ, lưu lượng mạng và các cơ chế phòng thủ tự động</p>
             </div>
           </div>
 
@@ -451,14 +552,14 @@
           <div>
             <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <i data-lucide="network" class="w-5 h-5 text-blue-400 shrink-0"></i>
-              <span>Cổng Dịch Vụ Mạng L4 & Virtual Security Gateway</span>
+              <span data-i18n="l4.title">Cổng Dịch Vụ Mạng L4 & Stream Gateway</span>
             </h3>
-            <p class="text-xs text-gray-400 mt-0.5">Định tuyến bảo vệ SMB (445), SSH, RDP... cho Synology NAS và máy chủ LAN. Toàn bộ lưu lượng được lọc qua GeoIP (Chỉ Việt Nam), Honeypot và Suricata IDS.</p>
+            <p class="text-xs text-gray-400 mt-0.5" data-i18n="l4.subtitle">Định tuyến bảo vệ SMB, SSH, RDP, Database... cho mạng nội bộ. Lưu lượng được kiểm soát qua Kernel Firewall, ThreatIntel và IDS.</p>
           </div>
           <div class="flex items-center gap-2.5 flex-wrap pt-0.5">
             <button onclick="openL4Modal()" class="px-3.5 sm:px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-1.5 transition shadow-lg shadow-blue-600/20 shrink-0">
               <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>+ Khai Báo Cổng Mới</span>
+              <span data-i18n="l4.btn_add">+ Khai Báo Cổng Mới</span>
             </button>
           </div>
         </div>
@@ -494,14 +595,14 @@
           <div>
             <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <i data-lucide="globe" class="w-5 h-5 text-emerald-400 shrink-0"></i>
-              <span>Quản Lý Website & Proxy Chuyển Tiếp</span>
+              <span data-i18n="sites.title">Quản Lý Website & Proxy Chuyển Tiếp</span>
             </h3>
-            <p class="text-xs text-gray-400 mt-0.5">Thêm, sửa, cấu hình đích chuyển tiếp (Upstream) và SSL tự động Let's Encrypt</p>
+            <p class="text-xs text-gray-400 mt-0.5" data-i18n="sites.subtitle">Thêm, sửa, cấu hình đích chuyển tiếp (Upstream) và SSL tự động Let's Encrypt</p>
           </div>
           <div class="flex items-center gap-2.5 flex-wrap pt-0.5">
             <button onclick="openAddSiteModal()" class="px-3.5 sm:px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs sm:text-sm font-semibold flex items-center space-x-1.5 transition shadow-lg shadow-emerald-600/20 shrink-0">
               <i data-lucide="plus" class="w-4 h-4"></i>
-              <span>+ Thêm Website Mới</span>
+              <span data-i18n="sites.btn_add">+ Thêm Website Mới</span>
             </button>
           </div>
         </div>
@@ -511,11 +612,11 @@
             <table class="w-full text-left text-xs sm:text-sm text-gray-300 min-w-[620px]">
               <thead class="bg-gray-900/80 text-[11px] sm:text-xs uppercase text-gray-400 border-b border-gray-800">
                 <tr>
-                  <th class="px-3 sm:px-4 py-3">Tên Miền (Host)</th>
-                  <th class="px-3 sm:px-4 py-3">Chuyển Tiếp Về (Upstream)</th>
-                  <th class="px-3 sm:px-4 py-3">Tự Động SSL</th>
-                  <th class="px-3 sm:px-4 py-3">Chế Độ WAF</th>
-                  <th class="px-3 sm:px-4 py-3 text-right">Thao Tác</th>
+                  <th class="px-3 sm:px-4 py-3" data-i18n="sites.col_domain">Tên Miền (Host)</th>
+                  <th class="px-3 sm:px-4 py-3" data-i18n="sites.col_upstream">Chuyển Tiếp Về (Upstream)</th>
+                  <th class="px-3 sm:px-4 py-3" data-i18n="sites.col_ssl">Tự Động SSL</th>
+                  <th class="px-3 sm:px-4 py-3" data-i18n="sites.col_waf">Chế Độ WAF</th>
+                  <th class="px-3 sm:px-4 py-3 text-right" data-i18n="sites.col_actions">Thao Tác</th>
                 </tr>
               </thead>
               <tbody id="sites-table-body" class="divide-y divide-gray-800"></tbody>
@@ -531,37 +632,37 @@
           <div>
             <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <i data-lucide="shield-check" class="w-5 h-5 text-emerald-400 shrink-0"></i>
-              <span>Trung Tâm Quy Tắc Phòng Thủ (Unified Rules Engine)</span>
+              <span data-i18n="rules.title">Trung Tâm Quy Tắc Phòng Thủ (Unified Rules Engine)</span>
             </h3>
-            <p class="text-xs text-gray-400 mt-0.5">Quản lý danh sách các quy tắc Quốc Gia (GeoIP), Dải mạng tin cậy (CIDR) và WAF Ứng Dụng</p>
+            <p class="text-xs text-gray-400 mt-0.5" data-i18n="rules.subtitle">Quản lý danh sách các quy tắc Quốc Gia (GeoIP), Dải mạng tin cậy (CIDR) và WAF Ứng Dụng</p>
           </div>
           <div class="flex items-center gap-2.5 flex-wrap pt-0.5">
             <button onclick="openDetectInterfacesModal()" class="px-3 py-1.5 sm:px-3.5 sm:py-2 bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition shadow-lg shadow-cyan-950/20" title="Tự động quét nhanh tất cả IP LAN / Tailscale / ZeroTier của các card mạng đang có để thêm rule">
               <i data-lucide="scan" class="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400"></i>
-              <span>Rule Mẫu Card Mạng</span>
+              <span data-i18n="rules.btn_detect_interfaces">Rule Mẫu Card Mạng</span>
             </button>
             <button onclick="openPresetsModal()" class="px-3 py-1.5 sm:px-3.5 sm:py-2 bg-purple-600/20 hover:bg-purple-600 text-purple-300 hover:text-white border border-purple-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition" title="Thư viện quy tắc mẫu bảo vệ Synology NAS / Web">
               <i data-lucide="sparkles" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
-              <span>Rule Mẫu (Presets)</span>
+              <span data-i18n="rules.btn_presets">Rule Mẫu (Presets)</span>
             </button>
             <button onclick="openAddUnifiedRuleModal()" class="px-3 py-1.5 sm:px-4 sm:py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition shadow-lg shadow-emerald-600/30">
               <i data-lucide="plus-circle" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>
-              <span>+ Thêm Quy Tắc Mới</span>
+              <span data-i18n="rules.btn_add">+ Thêm Quy Tắc Mới</span>
             </button>
           </div>
         </div>
 
-        <!-- Zero-Trust / Default Drop Principle Banner -->
+        <!-- Zero-Trust / Multi-Tier Defense Principle Banner -->
         <div class="p-3.5 sm:p-4 rounded-2xl border border-red-500/30 bg-red-950/20 flex items-start gap-3 text-red-300">
           <div class="p-2 sm:p-2.5 rounded-xl bg-red-500/20 text-red-400 shrink-0 mt-0.5">
             <i data-lucide="lock" class="w-4 h-4 sm:w-5 sm:h-5"></i>
           </div>
           <div class="space-y-1 text-xs">
-            <div class="font-bold text-white text-xs sm:text-sm flex items-center gap-2">
-              🔒 NGUYÊN TẮC ZERO-TRUST: MỌI THỨ KHÔNG ĐƯỢC CHO PHÉP ĐỀU BỊ DROP
+            <div class="font-bold text-white text-xs sm:text-sm flex items-center gap-2" data-i18n="rules.zero_trust_title">
+              🔒 NGUYÊN TẮC ZERO-TRUST & PHÒNG THỦ ĐA TẦNG
             </div>
-            <p class="text-gray-300 text-[11px] sm:text-xs leading-relaxed">
-              vSafeGate vận hành theo cơ chế <strong>Default Deny</strong> ở tầng Linux Kernel (ipset hash:net O(1)). Toàn bộ kết nối từ địa chỉ IP quốc tế ngoài lãnh thổ <strong>Việt Nam</strong> (Mỹ, Trung Quốc, Nga...) hoặc ngoài dải mạng VPN Tailscale / LAN đều bị <strong>DROP ngay lập tức</strong>. Mọi IP qua vòng 1 tiếp tục được Coraza WAF và Suricata IDS phân tích sâu; bất kỳ vi phạm nào đều bị lập tức đưa vào Blacklist khóa ở Kernel.
+            <p class="text-gray-300 text-[11px] sm:text-xs leading-relaxed" data-i18n="rules.zero_trust_desc">
+              vSafeGate vận hành theo cơ chế <strong>Default Deny</strong> ở tầng Linux Kernel (ipset hash:net O(1)). Toàn bộ kết nối không nằm trong danh sách cho phép (Whitelist) hoặc thuộc danh sách quốc gia bị chặn đều bị <strong>DROP ngay lập tức</strong>. Mọi lưu lượng qua vòng 1 tiếp tục được Coraza WAF và Suricata IDS phân tích sâu; bất kỳ vi phạm nào đều bị lập tức đưa vào Blacklist khóa ở Kernel.
             </p>
           </div>
         </div>
@@ -678,22 +779,22 @@
           <div>
             <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <i data-lucide="shield-alert" class="w-5 h-5 text-purple-400 shrink-0"></i>
-              <span>Giám Sát Địa Chỉ IP</span>
+              <span data-i18n="ipmgmt.title">Giám Sát Địa Chỉ IP</span>
             </h3>
-            <p class="text-xs text-gray-400 mt-0.5">Quản lý danh sách IP Chặn (Blacklist có TTL đếm ngược), IP Tin Cậy (Whitelist) và Thiết lập chính sách bảo vệ SSH, Honeypot, WAF</p>
+            <p class="text-xs text-gray-400 mt-0.5" data-i18n="ipmgmt.subtitle">Quản lý danh sách IP Chặn (Blacklist có TTL đếm ngược), IP Tin Cậy (Whitelist) và Thiết lập chính sách bảo vệ SSH, Honeypot, WAF</p>
           </div>
 
           <!-- View Switcher Pills -->
           <div class="flex items-center gap-2.5 flex-wrap pt-0.5">
             <div class="inline-flex p-1 bg-gray-900 border border-gray-800 rounded-xl gap-1 shrink-0">
               <button id="btn-ipview-blacklist" onclick="switchIPView('blacklist')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition bg-red-600 text-white shadow">
-                🔴 IP Bị Chặn (Blacklist & TTL)
+                <span data-i18n="ipmgmt.tab_blacklist">🔴 IP Bị Chặn (Blacklist & TTL)</span>
               </button>
               <button id="btn-ipview-whitelist" onclick="switchIPView('whitelist')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">
-                🟢 IP Tin Cậy (Whitelist)
+                <span data-i18n="ipmgmt.tab_whitelist">🟢 IP Tin Cậy (Whitelist)</span>
               </button>
               <button id="btn-ipview-policies" onclick="switchIPView('policies')" class="px-3 py-1.5 rounded-lg text-xs font-bold transition text-gray-400 hover:text-white">
-                ⚙️ Chính Sách Mặc Định
+                <span data-i18n="ipmgmt.tab_policies">⚙️ Chính Sách Mặc Định</span>
               </button>
             </div>
           </div>
@@ -996,22 +1097,22 @@
           <div>
             <h3 class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
               <i data-lucide="list-filter" class="w-5 h-5 text-emerald-400 shrink-0"></i>
-              <span>Nhật Ký Tấn Công Bền Vững (Persistent JSONL)</span>
+              <span data-i18n="logs.title">Nhật Ký Tấn Công Bền Vững (Persistent JSONL)</span>
               <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono bg-red-500/10 text-red-400 border border-red-500/20 whitespace-nowrap">
                 <span class="w-1.5 h-1.5 rounded-full bg-red-400 mr-1 pulse-dot"></span>
-                <span id="logs-total-header-badge">0</span> sự kiện
+                <span id="logs-total-header-badge">0</span> <span data-i18n="logs.events_badge">sự kiện</span>
               </span>
             </h3>
-            <p class="text-xs text-gray-400 mt-0.5">Lưu trữ không giới hạn vào file attacks.jsonl (tự động xoay vòng an toàn khi đạt 20MB)</p>
+            <p class="text-xs text-gray-400 mt-0.5" data-i18n="logs.subtitle">Lưu trữ không giới hạn vào file attacks.jsonl (tự động xoay vòng an toàn khi đạt 20MB)</p>
           </div>
           <div class="flex items-center gap-2.5 flex-wrap pt-0.5">
             <button onclick="exportLogs()" class="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition border border-gray-700" title="Tải file attacks.jsonl">
               <i data-lucide="download" class="w-3.5 h-3.5"></i>
-              <span>Xuất File .jsonl</span>
+              <span data-i18n="logs.btn_export">Xuất File .jsonl</span>
             </button>
             <button onclick="clearLogs()" class="px-3 py-1.5 bg-red-600/10 hover:bg-red-600/20 text-red-400 hover:text-red-300 rounded-lg text-xs font-medium flex items-center gap-1.5 transition border border-red-500/20" title="Xóa toàn bộ nhật ký">
               <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-              <span>Dọn Dẹp Log</span>
+              <span data-i18n="logs.btn_clear">Dọn Dẹp Log</span>
             </button>
           </div>
         </div>
@@ -1755,12 +1856,12 @@
       if (curNav) curNav.className = "w-full flex items-center space-x-3 px-3.5 py-2.5 rounded-lg text-xs sm:text-sm font-medium transition bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
       
       const breadcrumbs = {
-        dashboard: "Tổng Quan",
-        sites: "Website & Proxy",
-        l4: "Cổng Dịch Vụ L4",
-        rules: "Quy Tắc Phòng Thủ",
-        ipmgmt: "Giám Sát Địa Chỉ IP",
-        logs: "Nhật Ký Tấn Công"
+        dashboard: window.t ? t('nav.dashboard') : "Tổng Quan",
+        sites: window.t ? t('nav.sites') : "Website & Proxy",
+        l4: window.t ? t('nav.l4') : "Dịch Vụ L4",
+        rules: window.t ? t('nav.rules') : "Quy Tắc Phòng Thủ",
+        ipmgmt: window.t ? t('nav.ipmgmt') : "Giám Sát Địa Chỉ IP",
+        logs: window.t ? t('nav.logs') : "Nhật Ký Tấn Công"
       };
       if (document.getElementById('page-breadcrumb')) {
         document.getElementById('page-breadcrumb').innerText = breadcrumbs[tab] || "vSafeGate";
@@ -4062,10 +4163,79 @@
 
     async function reloadCaddy() {
       await fetch('/api/reload', { method: 'POST' }).then(r => r.json());
-      alert('Đã đồng bộ và nạp lại quy tắc WAF thành công!');
+      alert(window.t ? t('common.success') : 'Đã đồng bộ và nạp lại quy tắc WAF thành công!');
+    }
+
+    // ==================== THEME & I18N CONTROLLER ====================
+    function initTheme() {
+      const savedTheme = localStorage.getItem('vsafegate_theme') || 'dark';
+      setTheme(savedTheme);
+    }
+
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      if (theme === 'light') {
+        document.documentElement.classList.add('light');
+        document.documentElement.classList.remove('dark');
+      } else {
+        document.documentElement.classList.add('dark');
+        document.documentElement.classList.remove('light');
+      }
+      localStorage.setItem('vsafegate_theme', theme);
+      const icon = document.getElementById('theme-icon');
+      if (icon) {
+        icon.setAttribute('data-lucide', theme === 'light' ? 'moon' : 'sun');
+        if (theme === 'light') {
+          icon.className = "w-3.5 h-3.5 text-blue-500";
+        } else {
+          icon.className = "w-3.5 h-3.5 text-amber-400";
+        }
+        if (window.lucide) lucide.createIcons();
+      }
+      const btn = document.getElementById('theme-toggle-btn');
+      if (btn && window.t) {
+        btn.setAttribute('title', theme === 'light' ? t('theme.dark') : t('theme.light'));
+      }
+      updateChartsTheme(theme);
+    }
+
+    function toggleTheme() {
+      const current = document.documentElement.getAttribute('data-theme') || 'dark';
+      setTheme(current === 'dark' ? 'light' : 'dark');
+    }
+
+    function toggleLanguage() {
+      if (!window.i18n) return;
+      const newLang = window.i18n.getLang() === 'vi' ? 'en' : 'vi';
+      window.i18n.setLang(newLang);
+    }
+
+    function updateChartsTheme(theme) {
+      const gridColor = theme === 'light' ? '#e2e8f0' : '#1f2937';
+      const textColor = theme === 'light' ? '#64748b' : '#9ca3af';
+      if (trafficChart && trafficChart.options && trafficChart.options.scales) {
+        if (trafficChart.options.scales.x) {
+          trafficChart.options.scales.x.grid.color = gridColor;
+          trafficChart.options.scales.x.ticks.color = textColor;
+        }
+        if (trafficChart.options.scales.y) {
+          trafficChart.options.scales.y.grid.color = gridColor;
+          trafficChart.options.scales.y.ticks.color = textColor;
+        }
+        if (trafficChart.options.plugins && trafficChart.options.plugins.legend) {
+          trafficChart.options.plugins.legend.labels.color = textColor;
+        }
+        trafficChart.update();
+      }
+      if (typeChart && typeChart.options && typeChart.options.plugins && typeChart.options.plugins.legend) {
+        typeChart.options.plugins.legend.labels.color = textColor;
+        typeChart.update();
+      }
     }
 
     window.onload = () => {
+      initTheme();
+      if (window.i18n) window.i18n.apply();
       const fy = document.getElementById('footer-year');
       if (fy) {
         fy.textContent = new Date().getFullYear();

@@ -1,0 +1,67 @@
+name: Build and Release vSafeGate
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build & Release Binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Go Environment
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          check-latest: true
+
+      - name: Run Unit Tests
+        run: |
+          cd mgt
+          go test -v ./...
+
+      - name: Compile Multi-Architecture Binaries
+        run: |
+          mkdir -p dist
+          cd mgt
+          
+          # Linux amd64 (x86_64)
+          echo "Building Linux amd64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/vsafegate-linux-amd64 .
+          
+          # Linux arm64 (aarch64)
+          echo "Building Linux arm64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../dist/vsafegate-linux-arm64 .
+          
+          cd ..
+          chmod +x dist/vsafegate-*
+
+      - name: Generate Checksums
+        run: |
+          cd dist
+          sha256sum vsafegate-* > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            dist/vsafegate-linux-amd64
+            dist/vsafegate-linux-arm64
+            dist/sha256sums.txt
+            install.sh
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
