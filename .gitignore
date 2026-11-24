@@ -1,5 +1,30 @@
-# Binaries
-*-linux-amd64
-*.exe
+# Private credentials, notes, and local environment files
+Memory.md
+*.local.md
+*.secret.*
+.env
+.env.*
 
+# Compiled binaries and compressed release packages
+*-linux-amd64
+*-linux-arm64
+*.exe
+caddy-linux-*
+openwaf-*
+vsafegate-*
 caddy.gz
+*.tar.gz
+*.zip
+
+# Runtime logs, database, and temporary storage
+/scratch/
+/data/
+/logs/
+*.log
+*.jsonl
+
+# OS / Editor temporary artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.bak

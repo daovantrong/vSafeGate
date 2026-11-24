@@ -120,16 +120,7 @@ func initDefaults(cfgPath, caddyPath, rulesPath, logsPath string) *AppState {
 
 	if !loaded {
 		s.config = Config{
-			Sites: []Site{
-				{
-					ID:        "site-1",
-					Domain:    "data.kientrucht.com",
-					Upstream:  "https://192.168.1.254:5001",
-					SSL:       true,
-					WAF:       true,
-					CreatedAt: time.Now(),
-				},
-			},
+			Sites:            []Site{},
 			BlacklistIP:      []string{},
 			BannedIPs:        []BannedIPEntry{},
 			WhitelistIPs:     []WhitelistIPEntry{},
@@ -143,36 +134,13 @@ func initDefaults(cfgPath, caddyPath, rulesPath, logsPath string) *AppState {
 				WAFAutoBanThreshold: 10,
 				SuricataAutoBan:     true,
 			},
-			GeoIPMode:        "whitelist",
-			AllowedCountries: []string{"VN"},
+			GeoIPMode:        "disabled",
+			AllowedCountries: []string{},
 			BlockedCountries: []string{"CN", "RU"},
-			MgmtDomain:       "data.kientrucht.com",
+			MgmtDomain:       "",
 			MgmtHTTPSPort:    4438,
 			MgmtHTTPPort:     808,
-			L4Services: []L4Service{
-				{
-					ID:          "l4-smb",
-					Name:        "Synology SMB File Share",
-					Protocol:    "tcp",
-					ListenPort:  445,
-					BackendAddr: "192.168.1.254:445",
-					Mode:        "proxy",
-					Enabled:     true,
-					MaxConns:    50,
-					Description: "Bảo vệ truy cập chia sẻ file SMB cho NAS qua vSafeGate Gateway",
-				},
-				{
-					ID:          "l4-ssh",
-					Name:        "Synology SSH Gateway",
-					Protocol:    "tcp",
-					ListenPort:  2222,
-					BackendAddr: "192.168.1.254:22",
-					Mode:        "proxy",
-					Enabled:     false,
-					MaxConns:    10,
-					Description: "Cổng SSH an toàn vào NAS (cần bật SSH trên NAS cổng 22)",
-				},
-			},
+			L4Services:       []L4Service{},
 			Rules: []CustomRule{
 				{
 					ID:          "rule-1001",
@@ -224,10 +192,7 @@ func initDefaults(cfgPath, caddyPath, rulesPath, logsPath string) *AppState {
 
 	// Auto-migrations & defaults
 	if s.config.GeoIPMode == "" {
-		s.config.GeoIPMode = "whitelist"
-	}
-	if len(s.config.AllowedCountries) == 0 {
-		s.config.AllowedCountries = []string{"VN"}
+		s.config.GeoIPMode = "disabled"
 	}
 	if len(s.config.BlockedCountries) == 0 {
 		s.config.BlockedCountries = []string{"CN", "RU"}
@@ -238,26 +203,10 @@ func initDefaults(cfgPath, caddyPath, rulesPath, logsPath string) *AppState {
 	if len(s.config.WhitelistIPs) == 0 {
 		now := time.Now()
 		s.config.WhitelistIPs = []WhitelistIPEntry{
-			{IP: "10.0.0.0/8", Note: "Dải mạng nội bộ LAN (Class A / PVE)", CreatedAt: now},
+			{IP: "10.0.0.0/8", Note: "Dải mạng nội bộ LAN (Class A)", CreatedAt: now},
 			{IP: "172.16.0.0/12", Note: "Dải mạng riêng (Class B)", CreatedAt: now},
-			{IP: "100.64.0.0/10", Note: "Dải mạng Tailscale VPN (100.64.0.0/10)", CreatedAt: now},
-			{IP: "192.168.0.0/16", Note: "Dải mạng nội bộ LAN Gateway / Router / NAS", CreatedAt: now},
+			{IP: "192.168.0.0/16", Note: "Dải mạng nội bộ LAN Gateway / Router (Class C)", CreatedAt: now},
 			{IP: "127.0.0.1", Note: "Localhost loopback", CreatedAt: now},
-		}
-	} else {
-		hasTailscale := false
-		for _, w := range s.config.WhitelistIPs {
-			if strings.HasPrefix(w.IP, "100.") {
-				hasTailscale = true
-				break
-			}
-		}
-		if !hasTailscale {
-			s.config.WhitelistIPs = append(s.config.WhitelistIPs, WhitelistIPEntry{
-				IP:        "100.64.0.0/10",
-				Note:      "Dải mạng Tailscale VPN (100.64.0.0/10)",
-				CreatedAt: time.Now(),
-			})
 		}
 	}
 	if s.config.DefensePolicy.DefaultBanTTLHours < 0 {

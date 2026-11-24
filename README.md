@@ -53,11 +53,11 @@ flowchart TD
         RuleSSH -- "Forwarding / App Ports" --> Dispatcher{"Phân Loại Dịch Vụ"}
 
         Dispatcher -- "Port 80 / 443" --> CaddyWAF["Caddy Reverse Proxy\n+ Coraza WAF (CRS v4 + 10 Proactive Rules)"]
-        CaddyWAF -- "Hợp lệ" --> WebUpstream["Backend: Synology Web Station\n(192.168.1.254:80 / 443)"]
+        CaddyWAF -- "Hợp lệ" --> WebUpstream["Backend: Web App / Service\n(192.168.1.100:80 / 443)"]
         CaddyWAF -- "Tấn công L7" --> Block403["⛔ HTTP 403 Forbidden"]
 
-        Dispatcher -- "Port 445 (SMB)\n5000/5001 (DSM)\n5005/5006 (WebDAV)" --> L4Proxy["vSafeGate L4 Gateway\n(Linux Splice Zero-Copy)"]
-        L4Proxy --> NASBackend["Backend: Synology NAS Services\n(192.168.1.254:445, 5000, 5001, 5005, 5006)"]
+        Dispatcher -- "Port 445 (SMB)\n5000/5001 (Web)\n5005/5006 (WebDAV)" --> L4Proxy["vSafeGate L4 Gateway\n(Linux Splice Zero-Copy)"]
+        L4Proxy --> NASBackend["Backend: File Storage & Internal Services\n(192.168.1.200:445, 5000, 5001, 5005, 5006)"]
 
         Dispatcher -- "Port 4438" --> AdminPanel["vSafeGate Web Management Panel\n(Go Native Daemon :9444)"]
     end
@@ -76,8 +76,8 @@ flowchart TD
 ## 📁 CẤU TRÚC THƯ MỤC DỰ ÁN
 
 ```text
-d:\SafeLineWAF\
-├── SERVERS.md                  # Sổ tay thông số máy chủ, địa chỉ IP, cổng SSH & chính sách kết nối
+vSafeGate/
+├── SERVERS.md                  # Hướng dẫn mẫu danh mục máy chủ & quy tắc kết nối
 ├── README.md                   # Tài liệu hướng dẫn kiến trúc, vận hành và cấu hình vSafeGate
 ├── rules/
 │   └── custom-rules.conf       # Quy tắc WAF Coraza SecLang tùy biến
@@ -98,17 +98,16 @@ d:\SafeLineWAF\
 
 ---
 
-## ⚙️ BẢNG DỊCH VỤ CẤU HÌNH (L4 & L7 GATEWAY)
+## ⚙️ BẢNG DỊCH VỤ CẤU HÌNH MẪU (L4 & L7 GATEWAY)
 
 | Dịch vụ | Tầng | Cổng nghe vSafeGate | Backend Đích | Giao thức / Cơ chế | Bảo vệ |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Web Station (HTTP)** | L7 | `:80` | `192.168.1.254:80` | Reverse Proxy | CRS v4 + 10 Proactive Rules |
-| **Web Station (HTTPS)**| L7 | `:443` | `https://192.168.1.254:443` | Reverse Proxy + TLS | CRS v4 + 10 Proactive Rules |
-| **Synology SMB** | L4 | `:445` | `192.168.1.254:445` | TCP Zero-Copy Splice | GeoIP VN + ThreatIntel + IPSet |
-| **Synology DSM HTTP** | L4 | `:5000` | `192.168.1.254:5000` | TCP Zero-Copy Splice | GeoIP VN + ThreatIntel + IPSet |
-| **Synology DSM HTTPS**| L4 | `:5001` | `192.168.1.254:5001` | TCP Zero-Copy Splice | GeoIP VN + ThreatIntel + IPSet |
-| **Synology WebDAV HTTP**| L4 | `:5005` | `192.168.1.254:5005` | TCP Zero-Copy Splice | GeoIP VN + ThreatIntel + IPSet |
-| **Synology WebDAV HTTPS**| L4 | `:5006` | `192.168.1.254:5006` | TCP Zero-Copy Splice | GeoIP VN + ThreatIntel + IPSet |
+| **Web App (HTTP)** | L7 | `:80` | `192.168.1.100:80` | Reverse Proxy | CRS v4 + 10 Proactive Rules |
+| **Web App (HTTPS)**| L7 | `:443` | `https://192.168.1.100:443` | Reverse Proxy + TLS | CRS v4 + 10 Proactive Rules |
+| **File Server (SMB)** | L4 | `:445` | `192.168.1.200:445` | TCP Zero-Copy Splice | GeoIP + ThreatIntel + IPSet |
+| **App Portal (HTTP)** | L4 | `:5000` | `192.168.1.200:5000` | TCP Zero-Copy Splice | GeoIP + ThreatIntel + IPSet |
+| **App Portal (HTTPS)**| L4 | `:5001` | `192.168.1.200:5001` | TCP Zero-Copy Splice | GeoIP + ThreatIntel + IPSet |
+| **Storage WebDAV** | L4 | `:5005` | `192.168.1.200:5005` | TCP Zero-Copy Splice | GeoIP + ThreatIntel + IPSet |
 | **vSafeGate Dashboard** | L7 | `:4438` | `127.0.0.1:9444` | Web Panel HTTPS | PAM Auth + Whitelist Only |
 
 ---
@@ -134,19 +133,17 @@ Tất cả các quy tắc đã được biên dịch và kích hoạt trong `/et
 
 ### 1. Truy cập SSH Quản Trị
 ```bash
-# Truy cập vSafeGate VM (Alpine Linux):
-ssh -p 2251 trong@100.101.102.1
-# Hoặc qua mạng LAN nội bộ:
-ssh -p 2251 trong@192.168.1.251
+# Truy cập máy chủ vSafeGate qua SSH (cổng bảo vệ 2251):
+ssh -p 2251 user@<GATEWAY_IP>
 ```
 
 ### 2. Quản lý Dịch vụ
-- **Trên Alpine Linux (vSafeGate VM):**
+- **Trên Alpine Linux (OpenRC):**
   ```bash
   sudo rc-service vsafegate restart
   sudo rc-service caddy restart
   ```
-- **Trên Debian / Proxmox VE:**
+- **Trên Debian / Ubuntu / Proxmox VE (Systemd):**
   ```bash
   sudo systemctl restart vsafegate
   sudo systemctl restart caddy
@@ -173,14 +170,14 @@ sudo iptables -L INPUT -n --line-numbers
 ### 5. Thử Nghiệm Kiểm Tra Phòng Thủ (Verification Commands)
 ```bash
 # Test 1: Kiểm tra WAF chặn SQL Injection (Kỳ vọng HTTP 403 Forbidden):
-curl -k -i -H "Host: data.kientrucht.com" "https://192.168.1.251/?id=1%20UNION%20SELECT%20null,null"
+curl -k -i -H "Host: app.example.com" "https://<GATEWAY_IP>/?id=1%20UNION%20SELECT%20null,null"
 
 # Test 2: Kiểm tra WAF chặn Security Scanner UA:
-curl -k -i -A "sqlmap/1.8" -H "Host: data.kientrucht.com" "https://192.168.1.251/"
+curl -k -i -A "sqlmap/1.8" -H "Host: app.example.com" "https://<GATEWAY_IP>/"
 
 # Test 3: Kiểm tra L4 Gateway SMB (Port 445):
-nc -zv 192.168.1.251 445
+nc -zv <GATEWAY_IP> 445
 
-# Test 4: Kiểm tra L4 Gateway DSM (Port 5001):
-curl -k -i https://192.168.1.251:5001/
+# Test 4: Kiểm tra L4 Gateway HTTPS (Port 5001):
+curl -k -i https://<GATEWAY_IP>:5001/
 ```

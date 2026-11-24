@@ -23,7 +23,7 @@ func TestPersistentLogManager(t *testing.T) {
 			ID:        "log-" + string(rune('0'+i)),
 			Timestamp: time.Now(),
 			ClientIP:  "203.0.113." + string(rune('0'+i)),
-			Host:      "data.kientrucht.com",
+			Host:      "app.example.com",
 			URI:       "/test?id=1",
 			Method:    "GET",
 			RuleID:    1003,
