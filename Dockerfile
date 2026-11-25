@@ -1,15 +1,20 @@
-# Stage 1: Build Caddy with Coraza WAF plugin
-FROM caddy:2.8-builder AS builder
+# Stage 1: Build vendored Caddy with Coraza WAF plugin completely offline (reproducible)
+FROM golang:1.27.1-alpine AS builder
 
-RUN xcaddy build \
-    --with github.com/corazawaf/coraza-caddy/v2
+WORKDIR /src
+COPY caddy-core/ ./
 
-# Stage 2: Final runtime image
-FROM caddy:2.8-alpine
+RUN CGO_ENABLED=0 go build -mod=vendor -ldflags="-s -w" -o /usr/bin/caddy .
+
+# Stage 2: Minimal immutable runtime image
+FROM alpine:3.21
+
+RUN apk add --no-cache ca-certificates tzdata && \
+    mkdir -p /etc/caddy/rules /var/log/caddy /data /config
 
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 
-# Tạo thư mục chứa rules
-RUN mkdir -p /etc/caddy/rules
-
 WORKDIR /etc/caddy
+EXPOSE 80 443 2019
+
+CMD ["/usr/bin/caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

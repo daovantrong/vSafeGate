@@ -152,17 +152,19 @@ flowchart TD
 
 ---
 
-## 🤖 PHÁT HÀNH TỰ ĐỘNG QUA GITHUB ACTIONS (CI/CD)
+## 🤖 PHÁT HÀNH TỰ ĐỘNG QUA GITHUB ACTIONS (CI/CD — KHÉP KÍN TRONG REPO)
 
-Kho mã nguồn đã tích hợp workflow [`.github/workflows/release.yml`](.github/workflows/release.yml). Khi bạn đẩy một Git tag mới (ví dụ `v2.1.0`), GitHub Actions sẽ tự động:
+Toàn bộ mã nguồn và phụ thuộc của Caddy + Coraza WAF + OWASP CRS đã được lưu (vendored) trọn vẹn trong [`caddy-core/`](caddy-core/) (`Caddy v2.11.9`, `coraza-caddy/v2 v2.6.2`, `coraza-coreruleset/v4 v4.25.0`, biên dịch bằng `Go 1.27.1`) và [`mgt/`](mgt/) không dùng bất kỳ thư viện Go ngoài nào — đảm bảo build không bao giờ bị gãy khi bên ngoài thay đổi.
+
+Khi bạn đẩy tag phát hành (ví dụ `v1.0.1`), workflow [`.github/workflows/release.yml`](.github/workflows/release.yml) sẽ tự động:
 1. Chạy toàn bộ unit test (`cd mgt && go test -v ./...`).
-2. Biên dịch chéo binary không phụ thuộc (`CGO_ENABLED=0`) cho **`linux/amd64`** và **`linux/arm64`**, gồm cả **`vsafegate`** và **`caddy-coraza`** (`coraza-caddy/v2`).
+2. Biên dịch chéo binary tĩnh (`CGO_ENABLED=0`, `-mod=vendor`) cho **`linux/amd64`** và **`linux/arm64`**, gồm cả **`vsafegate`** và **`caddy-coraza`**.
 3. Tạo file kiểm tra toàn vẹn `sha256sums.txt`.
-4. Tạo **GitHub Release** mới đính kèm `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `caddy-coraza-linux-amd64`, `caddy-coraza-linux-arm64`, `sha256sums.txt` và `install.sh` — giúp `install.sh` tải và cài xong chỉ trong vài giây.
+4. Tạo **GitHub Release** mới đính kèm `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `caddy-coraza-linux-amd64`, `caddy-coraza-linux-arm64`, `sha256sums.txt`, `VERSION` và `install.sh`.
 
 ```bash
-git tag v2.1.0
-git push origin v2.1.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 ---
@@ -172,17 +174,24 @@ git push origin v2.1.0
 ```text
 vSafeGate/
 ├── .github/workflows/
-│   └── release.yml             # CI/CD tự động test, build amd64/arm64 (vSafeGate + Caddy Coraza) & Release
+│   └── release.yml             # CI/CD tự động test, build amd64/arm64 (Go 1.27.1, vendored) & Release
+├── VERSION                     # Phiên bản phát hành chuẩn (1.0.1)
 ├── install.sh                  # Script cài đặt tự động hoàn toàn 1 dòng (Systemd & OpenRC)
 ├── README.md                   # Tài liệu hướng dẫn Tiếng Anh (Mặc định)
 ├── README.vi.md                # Tài liệu hướng dẫn Tiếng Việt
 ├── SERVERS.md                  # Tài liệu mẫu danh mục máy chủ & ánh xạ cổng
-├── Dockerfile                  # Build Caddy 2.8 kèm Coraza WAF plugin
+├── Dockerfile                  # Docker build offline từ caddy-core (golang:1.27.1-alpine -> alpine:3.21)
 ├── docker-compose.yml          # Triển khai Caddy + Coraza container
 ├── Caddyfile                   # Mẫu Caddyfile khởi tạo cho Docker
 ├── rules/
 │   └── custom-rules.conf       # Quy tắc WAF Coraza SecLang tùy biến
-└── mgt/                        # Mã nguồn Go của vSafeGate Management Daemon
+├── scripts/
+│   └── vsafegate-sync-threatintel.sh  # Script đồng bộ Threat Intelligence ipset
+├── caddy-core/                 # Mã nguồn + toàn bộ dependency đã vendor của Caddy & Coraza WAF
+│   ├── main.go                 # Entrypoint đăng ký module Caddy chuẩn + Coraza WAF
+│   ├── go.mod / go.sum         # Khóa cứng Go 1.27.1, Caddy v2.11.9, Coraza-Caddy v2.6.2
+│   └── vendor/                 # Toàn bộ thư viện Go đi kèm (build offline 100%, không lo upstream đổi)
+└── mgt/                        # Mã nguồn Go của vSafeGate Management Daemon (chỉ dùng thư viện chuẩn)
     ├── main.go                 # HTTP API, khởi tạo mặc định an toàn & nhúng giao diện Web
     ├── models.go               # Cấu trúc dữ liệu Config, AttackLog, L4/L7, Presets
     ├── auth.go                 # Xác thực PAM/Shadow (`/usr/local/bin/vsafegate-auth`) & PBKDF-SHA256

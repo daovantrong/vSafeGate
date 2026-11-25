@@ -9,12 +9,18 @@ Memory.md
 *-linux-amd64
 *-linux-arm64
 *.exe
-caddy-linux-*
-openwaf-*
-vsafegate-*
+/caddy-linux-*
+/openwaf-*
+/vsafegate-*
+/dist/
 caddy.gz
 *.tar.gz
 *.zip
+
+# Keep vendored Caddy + Coraza source files tracked inside caddy-core/vendor
+!caddy-core/
+!caddy-core/vendor/
+!caddy-core/vendor/**
 
 # Runtime logs, database, and temporary storage
 /scratch/

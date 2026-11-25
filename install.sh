@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-#  vSafeGate All-in-One Automated Installer & Updater
+#  vSafeGate All-in-One Automated Installer & Updater (v1.0.1)
 #  GitHub Repository: https://github.com/daovantrong/vSafeGate
 #  Supports: Debian, Ubuntu, Proxmox VE, Alpine Linux, RHEL/Rocky/Alma, Arch
 # ==============================================================================
@@ -10,6 +10,8 @@ set -e
 REPO="daovantrong/vSafeGate"
 REPO_URL="https://github.com/${REPO}.git"
 RAW_URL="https://raw.githubusercontent.com/${REPO}/main"
+DEFAULT_VERSION="1.0.1"
+PINNED_GO_VER="go1.27.1"
 
 INSTALL_BIN="/usr/local/bin/vsafegate"
 CADDY_BIN="/usr/bin/caddy"
@@ -41,6 +43,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+VSAFE_VER="$DEFAULT_VERSION"
+if [ -f "./VERSION" ]; then
+    VSAFE_VER=$(tr -d '[:space:]' < ./VERSION)
+fi
+
 echo -e "${CYAN}${BOLD}"
 echo "  __      __ _____        __         _____       _        "
 echo "  \ \    / // ____|      / _|       / ____|     | |       "
@@ -49,7 +56,7 @@ echo "    \ \/ /  \___ \ / _\` |  _/ _ \  | | |_ |/ _\` | __/ _ \ "
 echo "     \  /   ____) | (_| | ||  __/  | |__| | (_| | ||  __/ "
 echo "      \/   |_____/ \__,_|_| \___|   \_____|\__,_|\__\___| "
 echo -e "${NC}"
-echo -e "${GREEN}==> vSafeGate Automated All-in-One Installer (WAF + L4 Gateway + Dashboard)${NC}\n"
+echo -e "${GREEN}==> vSafeGate v${VSAFE_VER} Automated Installer (Vendored & Reproducible)${NC}\n"
 
 # 1. Check Root Privileges
 if [ "$(id -u)" -ne 0 ]; then
@@ -130,50 +137,57 @@ if [ -n "$ADMIN_IP" ]; then
     echo -e "${YELLOW}[SAFETY] Detected active SSH admin IP (${BOLD}${ADMIN_IP}${NC}${YELLOW}) -> auto-adding to allowlist.${NC}"
 fi
 
-# Helper: Ensure Go >= 1.22 is available for source fallback builds
+# Helper: Ensure Go >= 1.27.1 is available for reproducible vendored source builds
 ensure_go() {
     if command -v go >/dev/null 2>&1; then
         GO_CUR=$(go version | awk '{print $3}' | sed 's/go//')
         GO_MAJ=$(echo "$GO_CUR" | cut -d. -f1)
         GO_MIN=$(echo "$GO_CUR" | cut -d. -f2)
-        if [ "${GO_MAJ:-0}" -gt 1 ] || { [ "${GO_MAJ:-0}" -eq 1 ] && [ "${GO_MIN:-0}" -ge 22 ]; }; then
+        if [ "${GO_MAJ:-0}" -gt 1 ] || { [ "${GO_MAJ:-0}" -eq 1 ] && [ "${GO_MIN:-0}" -ge 27 ]; }; then
             return 0
         fi
     fi
 
     if [ "$OS" = "alpine" ]; then
-        echo -e "${YELLOW}[INFO] Installing temporary Alpine Go toolchain for compilation...${NC}"
-        apk add --no-cache --virtual .vsafegate-build go >/dev/null 2>&1
+        apk add --no-cache --virtual .vsafegate-build go >/dev/null 2>&1 || true
+        if command -v go >/dev/null 2>&1; then
+            GO_CUR=$(go version | awk '{print $3}' | sed 's/go//')
+            GO_MAJ=$(echo "$GO_CUR" | cut -d. -f1)
+            GO_MIN=$(echo "$GO_CUR" | cut -d. -f2)
+            if [ "${GO_MAJ:-0}" -gt 1 ] || { [ "${GO_MAJ:-0}" -eq 1 ] && [ "${GO_MIN:-0}" -ge 27 ]; }; then
+                ALPINE_TMP_GO=1
+                return 0
+            fi
+        fi
+        # Fallback if Alpine repo Go < 1.27: install gcompat so official pinned Go binary runs cleanly
+        apk add --no-cache --virtual .vsafegate-build gcompat >/dev/null 2>&1
         ALPINE_TMP_GO=1
-        return 0
     fi
 
-    echo -e "${YELLOW}[INFO] Downloading temporary Go toolchain from go.dev for automatic build...${NC}"
-    GO_VER=$(curl -fsSL "https://go.dev/VERSION?m=text" | head -n 1 | tr -d '[:space:]')
-    if [ -z "$GO_VER" ]; then
-        GO_VER="go1.23.6"
-    fi
+    echo -e "${YELLOW}[INFO] Fetching pinned Go toolchain (${PINNED_GO_VER}) for reproducible build...${NC}"
     rm -rf "$TMP_GO"
     mkdir -p "$TMP_GO"
-    curl -fsSL "https://go.dev/dl/${GO_VER}.linux-${TARGET_ARCH}.tar.gz" | tar -C "$TMP_GO" -xzf -
+    curl -fsSL "https://go.dev/dl/${PINNED_GO_VER}.linux-${TARGET_ARCH}.tar.gz" | tar -C "$TMP_GO" -xzf -
     export PATH="${TMP_GO}/go/bin:${PATH}"
     export GOPATH="$TMP_GOPATH"
-    export GOMODCACHE="${TMP_GOPATH}/pkg/mod"
     mkdir -p "$TMP_GOPATH"
 }
 
-# Helper: Ensure source tree exists if compiling from source
+# Helper: Ensure repository source tree exists locally
 ensure_source() {
     if [ -d "./mgt" ] && [ -f "./mgt/go.mod" ]; then
         SRC_DIR="$(pwd)"
         return 0
     fi
     if [ ! -d "$TMP_SRC/mgt" ]; then
-        echo -e "${YELLOW}[INFO] Cloning repository from ${REPO_URL}...${NC}"
+        echo -e "${YELLOW}[INFO] Cloning source tree from ${REPO_URL}...${NC}"
         rm -rf "$TMP_SRC"
         git clone --depth 1 "$REPO_URL" "$TMP_SRC" >/dev/null 2>&1
     fi
     SRC_DIR="$TMP_SRC"
+    if [ -f "${SRC_DIR}/VERSION" ]; then
+        VSAFE_VER=$(tr -d '[:space:]' < "${SRC_DIR}/VERSION")
+    fi
 }
 
 # Stop existing services cleanly before replacing binaries (avoids Text file busy)
@@ -186,7 +200,7 @@ fi
 
 mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$CADDY_DIR" "$CADDY_RULES_DIR" "$CADDY_LOG_DIR" /usr/local/bin /usr/bin
 
-# 6. Install vSafeGate Binary (GitHub Releases -> Local -> Auto-Build from Source)
+# 6. Install vSafeGate Binary (GitHub Releases -> Local -> Vendored Source Build)
 echo -e "${BLUE}[4/8] Installing vSafeGate core daemon...${NC}"
 LATEST_TAG=$(curl -s --max-time 10 "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
 
@@ -209,16 +223,16 @@ if [ "$VSAFE_OK" = false ] && [ -f "./vsafegate-linux-${TARGET_ARCH}" ]; then
 fi
 
 if [ "$VSAFE_OK" = false ]; then
-    echo -e "      No prebuilt release found yet; compiling automatically from GitHub source..."
+    echo -e "      Compiling from self-contained repo source (std-lib only)..."
     ensure_go
     ensure_source
-    (cd "${SRC_DIR}/mgt" && CGO_ENABLED=0 go build -ldflags="-s -w" -o "$INSTALL_BIN" .)
+    (cd "${SRC_DIR}/mgt" && CGO_ENABLED=0 go build -ldflags="-s -w -X main.AppVersion=${VSAFE_VER}" -o "$INSTALL_BIN" .)
     chmod 755 "$INSTALL_BIN"
 fi
 echo -e "${GREEN}[OK] vSafeGate binary installed at ${INSTALL_BIN}.${NC}"
 
-# 7. Install Caddy + Coraza WAF Automatically
-echo -e "${BLUE}[5/8] Ensuring Caddy + Coraza WAF (L7 Core & HTTPS Proxy)...${NC}"
+# 7. Install Caddy + Coraza WAF (GitHub Releases -> Local -> Vendored In-Repo Build)
+echo -e "${BLUE}[5/8] Installing vendored Caddy + Coraza WAF (L7 Core & HTTPS Proxy)...${NC}"
 CADDY_OK=false
 if command -v caddy >/dev/null 2>&1 && caddy list-modules 2>/dev/null | grep -q "coraza_waf"; then
     echo -e "${GREEN}[OK] Existing Caddy with Coraza WAF module detected.${NC}"
@@ -246,19 +260,10 @@ elif [ "$CADDY_OK" = false ] && [ "$TARGET_ARCH" = "amd64" ] && [ -f "./caddy.gz
 fi
 
 if [ "$CADDY_OK" = false ]; then
-    echo -e "      Compiling Caddy + Coraza WAF module automatically via xcaddy (first install may take 1-2 mins)..."
+    echo -e "      Building pinned Caddy + Coraza WAF offline from vendored caddy-core/ (-mod=vendor)..."
     ensure_go
-    export GOPATH="$TMP_GOPATH"
-    export GOMODCACHE="${TMP_GOPATH}/pkg/mod"
-    mkdir -p "$TMP_GOPATH"
-    if [ "$INIT_SYSTEM" = "systemd" ]; then
-        systemctl stop caddy >/dev/null 2>&1 || true
-    else
-        rc-service caddy stop >/dev/null 2>&1 || true
-    fi
-    CGO_ENABLED=0 go run github.com/caddyserver/xcaddy/cmd/xcaddy@latest build \
-        --with github.com/corazawaf/coraza-caddy/v2 \
-        --output "$CADDY_BIN"
+    ensure_source
+    (cd "${SRC_DIR}/caddy-core" && CGO_ENABLED=0 go build -mod=vendor -ldflags="-s -w" -o "$CADDY_BIN" .)
     chmod 755 "$CADDY_BIN"
     CADDY_OK=true
 fi
@@ -322,7 +327,12 @@ else
 fi
 
 # Install automated Threat Intelligence feed sync script + daily cron
-cat <<'EOF' > /usr/local/bin/vsafegate-sync-threatintel.sh
+if [ -n "${SRC_DIR:-}" ] && [ -f "${SRC_DIR}/scripts/vsafegate-sync-threatintel.sh" ]; then
+    cp -f "${SRC_DIR}/scripts/vsafegate-sync-threatintel.sh" /usr/local/bin/vsafegate-sync-threatintel.sh
+elif [ -f "./scripts/vsafegate-sync-threatintel.sh" ]; then
+    cp -f "./scripts/vsafegate-sync-threatintel.sh" /usr/local/bin/vsafegate-sync-threatintel.sh
+else
+    cat <<'EOF' > /usr/local/bin/vsafegate-sync-threatintel.sh
 #!/usr/bin/env bash
 set -e
 TMP_LIST="/tmp/vsafegate_ti_raw.txt"
@@ -350,6 +360,7 @@ ipset swap vsafegate-threatintel-tmp vsafegate-threatintel
 ipset destroy vsafegate-threatintel-tmp
 rm -f "$TMP_LIST" "$IPSET_SCRIPT"
 EOF
+fi
 chmod 755 /usr/local/bin/vsafegate-sync-threatintel.sh
 
 if [ -d /etc/periodic/daily ]; then
@@ -463,7 +474,7 @@ HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || ip -4 addr show scope gl
 [ -z "$HOST_IP" ] && HOST_IP="127.0.0.1"
 
 echo -e "\n${GREEN}${BOLD}========================================================================${NC}"
-echo -e "${GREEN}${BOLD}   🎉 vSafeGate Installed & Started Automatically!${NC}"
+echo -e "${GREEN}${BOLD}   🎉 vSafeGate v${VSAFE_VER} Installed & Started Successfully!${NC}"
 echo -e "${GREEN}${BOLD}========================================================================${NC}"
 echo -e "  🌐 ${BOLD}Web Admin Dashboard:${NC}  ${CYAN}https://${HOST_IP}:4438/${NC}"
 echo -e "  🔐 ${BOLD}Authentication:${NC}       Linux PAM server account (sudo user)"

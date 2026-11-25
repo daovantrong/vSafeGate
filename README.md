@@ -152,17 +152,19 @@ flowchart TD
 
 ---
 
-## 🤖 AUTOMATED GITHUB RELEASES (CI/CD)
+## 🤖 AUTOMATED GITHUB RELEASES (CI/CD — SELF-CONTAINED)
 
-This repository includes [`.github/workflows/release.yml`](.github/workflows/release.yml). Pushing a version tag (e.g., `v2.1.0`) automatically:
-1. Executes all Go unit tests (`cd mgt && go test -v ./...`).
-2. Cross-compiles static binaries (`CGO_ENABLED=0`) for **`linux/amd64`** and **`linux/arm64`**, for both **`vsafegate`** and **`caddy-coraza`** (`coraza-caddy/v2`).
-3. Generates `sha256sums.txt`.
-4. Publishes a **GitHub Release** with `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `caddy-coraza-linux-amd64`, `caddy-coraza-linux-arm64`, `sha256sums.txt`, and `install.sh` — enabling fast zero-compile installs via `install.sh`.
+This repository vendors all Caddy + Coraza WAF + OWASP CRS dependencies inside [`caddy-core/`](caddy-core/) (`Caddy v2.11.9`, `coraza-caddy/v2 v2.6.2`, `coraza-coreruleset/v4 v4.25.0`, built with `Go 1.27.1`) and keeps zero external dependencies in [`mgt/`](mgt/). Builds never break even if upstream packages change.
+
+Pushing the release tag (e.g., `v1.0.1`) automatically triggers [`.github/workflows/release.yml`](.github/workflows/release.yml) to:
+1. Execute all Go unit tests (`cd mgt && go test -v ./...`).
+2. Cross-compile reproducible static binaries (`CGO_ENABLED=0`, `-mod=vendor`) for **`linux/amd64`** and **`linux/arm64`**, for both **`vsafegate`** and **`caddy-coraza`**.
+3. Generate `sha256sums.txt`.
+4. Publish a **GitHub Release** with `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `caddy-coraza-linux-amd64`, `caddy-coraza-linux-arm64`, `sha256sums.txt`, `VERSION`, and `install.sh`.
 
 ```bash
-git tag v2.1.0
-git push origin v2.1.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 ---
@@ -172,17 +174,24 @@ git push origin v2.1.0
 ```text
 vSafeGate/
 ├── .github/workflows/
-│   └── release.yml             # CI/CD workflow for multi-arch tests, builds (vSafeGate + Caddy Coraza), and Releases
-├── install.sh                  # All-in-one automated installer (systemd & OpenRC, zero manual setup)
+│   └── release.yml             # CI/CD workflow (Go 1.27.1, vendored offline builds, GitHub Releases)
+├── VERSION                     # Canonical release version (1.0.1)
+├── install.sh                  # All-in-one automated installer (systemd & OpenRC, zero external lock-in)
 ├── README.md                   # English documentation (Primary)
 ├── README.vi.md                # Vietnamese documentation
 ├── SERVERS.md                  # Server inventory & port mapping template
-├── Dockerfile                  # Builds Caddy 2.8 with Coraza WAF plugin
+├── Dockerfile                  # Offline vendored Docker build (golang:1.27.1-alpine -> alpine:3.21)
 ├── docker-compose.yml          # Container deployment for Caddy + Coraza
 ├── Caddyfile                   # Starter Caddyfile for Docker deployment
 ├── rules/
 │   └── custom-rules.conf       # Custom Coraza SecLang WAF rules
-└── mgt/                        # Go source code for vSafeGate Management Daemon
+├── scripts/
+│   └── vsafegate-sync-threatintel.sh  # Kernel Threat Intelligence ipset updater
+├── caddy-core/                 # Self-contained vendored Caddy + Coraza WAF + OWASP CRS source
+│   ├── main.go                 # Caddy entrypoint registering standard + Coraza WAF modules
+│   ├── go.mod / go.sum         # Pinned Go 1.27.1, Caddy v2.11.9, Coraza-Caddy v2.6.2
+│   └── vendor/                 # Full vendored Go module tree (offline reproducible builds)
+└── mgt/                        # Go source code for vSafeGate Management Daemon (stdlib only)
     ├── main.go                 # HTTP API, safe defaults & embedded web UI server
     ├── models.go               # Data models for Config, AttackLog, L4/L7 services, Presets
     ├── auth.go                 # Linux PAM/Shadow helper & PBKDF-SHA256 authentication

@@ -867,6 +867,7 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
+			"version":         AppVersion,
 			"status":          fmt.Sprintf("ACTIVE (%s)", initSystem),
 			"engine":          "OWASP Coraza v4 + Caddy Core",
 			"sites_count":     len(state.config.Sites),
@@ -1452,7 +1453,7 @@ func main() {
 
 	port := "127.0.0.1:9444"
 	fmt.Printf("=====================================================\n")
-	fmt.Printf("vSafeGate Virtual Security Management Dashboard Started on %s\n", port)
+	fmt.Printf("vSafeGate v%s Virtual Security Management Dashboard Started on %s\n", AppVersion, port)
 	if state.config.MgmtDomain != "" {
 		fmt.Printf("Web Panel (HTTPS): https://%s:%d\n", state.config.MgmtDomain, state.config.MgmtHTTPSPort)
 		fmt.Printf("Web Panel (HTTP):  http://%s:%d\n", state.config.MgmtDomain, state.config.MgmtHTTPPort)

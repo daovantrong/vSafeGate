@@ -18,10 +18,10 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Go Environment
+      - name: Setup Go Environment (Pinned from go.mod)
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version-file: 'mgt/go.mod'
           check-latest: true
 
       - name: Run Unit Tests
@@ -32,29 +32,29 @@ jobs:
       - name: Compile vSafeGate Binaries (amd64 & arm64)
         run: |
           mkdir -p dist
+          VER=$(tr -d '[:space:]' < VERSION || echo "1.0.1")
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VER="${GITHUB_REF_NAME#v}"
+          fi
           cd mgt
 
-          echo "Building vSafeGate Linux amd64..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/vsafegate-linux-amd64 .
+          echo "Building vSafeGate v${VER} Linux amd64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.AppVersion=${VER}" -o ../dist/vsafegate-linux-amd64 .
 
-          echo "Building vSafeGate Linux arm64..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../dist/vsafegate-linux-arm64 .
+          echo "Building vSafeGate v${VER} Linux arm64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.AppVersion=${VER}" -o ../dist/vsafegate-linux-arm64 .
 
-      - name: Build Caddy + Coraza WAF Binaries (amd64 & arm64)
+      - name: Build Caddy + Coraza WAF Binaries (Vendored & Immutable)
         run: |
-          go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-          XCADDY_BIN="$(go env GOPATH)/bin/xcaddy"
+          cd caddy-core
 
-          echo "Building Caddy + Coraza WAF Linux amd64..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 "$XCADDY_BIN" build \
-            --with github.com/corazawaf/coraza-caddy/v2 \
-            --output dist/caddy-coraza-linux-amd64
+          echo "Building Vendored Caddy + Coraza WAF Linux amd64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -mod=vendor -ldflags="-s -w" -o ../dist/caddy-coraza-linux-amd64 .
 
-          echo "Building Caddy + Coraza WAF Linux arm64..."
-          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 "$XCADDY_BIN" build \
-            --with github.com/corazawaf/coraza-caddy/v2 \
-            --output dist/caddy-coraza-linux-arm64
+          echo "Building Vendored Caddy + Coraza WAF Linux arm64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -mod=vendor -ldflags="-s -w" -o ../dist/caddy-coraza-linux-arm64 .
 
+          cd ..
           chmod +x dist/*
 
       - name: Generate Checksums
@@ -74,6 +74,7 @@ jobs:
             dist/caddy-coraza-linux-arm64
             dist/sha256sums.txt
             install.sh
+            VERSION
           generate_release_notes: true
           draft: false
           prerelease: false

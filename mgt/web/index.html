@@ -190,7 +190,7 @@
             <div>
               <h1 class="font-bold text-base tracking-wider text-white flex items-center gap-1.5">
                 vSafe<span class="text-emerald-400">Gate</span>
-                <span class="text-[10px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">v2.0</span>
+                <span id="app-version-badge" class="text-[10px] px-1 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">v1.0.1</span>
               </h1>
               <p class="text-[11px] text-gray-400">Virtual Security Gateway</p>
             </div>
@@ -2663,6 +2663,10 @@
         document.getElementById('stat-rules').innerText = resRules.length;
         document.getElementById('stat-blacklist').innerText = resStatus.blacklist_count || 0;
 
+        if (resStatus && resStatus.version) {
+          const verEl = document.getElementById('app-version-badge');
+          if (verEl) verEl.innerText = 'v' + String(resStatus.version).replace(/^v/, '');
+        }
         if (resStatus && resStatus.status) {
           const badge = document.getElementById('core-runtime-badge');
           if (badge) {

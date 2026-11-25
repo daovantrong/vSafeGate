@@ -4,6 +4,9 @@ import (
 	"time"
 )
 
+// AppVersion holds the semantic version of vSafeGate (overrideable at link time via -ldflags).
+var AppVersion = "1.0.1"
+
 type L4Service struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
