@@ -1,187 +1,185 @@
-# 🛡️ vSafeGate — Hệ Thống Tường Lửa Web (WAF) & L4 Stream Gateway
+# 🛡️ vSafeGate — Open-Source Web Application Firewall (WAF) & L4 Stream Gateway
 
-> **Ngôn ngữ / Language:** 🇻🇳 **Tiếng Việt** ([README.md](README.md)) | 🇬🇧 [English](README.en.md)
+> **Language / Ngôn ngữ:** 🇬🇧 **English** ([README.en.md](README.en.md)) | 🇻🇳 [Tiếng Việt](README.md)
 
-> **Open-Source Web Application Firewall (WAF) & L4 Stream Gateway**  
-> Giải pháp tường lửa đa máy chủ viết bằng Go: Bảo vệ 2 tầng (Linux Kernel `iptables`/`ipset` + Coraza WAF / L4 Zero-Copy `splice(2)`), giao diện Web **Dark/Light Theme**, **Đa ngôn ngữ (Tiếng Việt / English)** và nhúng hoàn toàn tài nguyên trong **1 file binary duy nhất** (0 CDN, 0 Docker bắt buộc).
-
----
-
-## 🚀 ĐIỂM NỔI BẬT
-
-- **Bảo Vệ 2 Tầng Chuyên Sâu (2-Tier Defense):**
-  - **Tầng 1 (Kernel Level - O(1)):** Lọc kết nối ngay tại nhân Linux bằng `iptables` + `ipset` (`vsafegate-blacklist`, `vsafegate-threatintel`, `vsafegate-allowed`, `vsafegate-countries`).
-  - **Tầng 2 (Application Level - L7 WAF):** Tích hợp **Caddy + Coraza WAF** kèm chuẩn **OWASP Core Rule Set (CRS)** và quy tắc tùy biến SecLang (`/etc/caddy/rules/custom-rules.conf`).
-- **Kiến Trúc Đa Máy Chủ (Multi-Server Ready & Zero Hardcode):**
-  - **GeoIP 3 Chế Độ (`disabled` | `whitelist` | `blacklist`):** Mặc định là `disabled` khi cài mới để tránh tự khóa quản trị viên trên VPS quốc tế; hỗ trợ chọn bật Whitelist hoặc Blacklist theo quốc gia bất kỳ lúc nào.
-  - **Tự Động Phát Hiện Card Mạng (Auto-Detect Interfaces):** Tự quét LAN, Tailscale, WireGuard, ZeroTier, Docker/Bridge để đề xuất CIDR đưa vào Whitelist chỉ bằng 1 cú nhấp chuột.
-  - **Anti-Lockout Fail-Safe:** Script cài đặt `install.sh` tự động phát hiện IP SSH hiện tại (`$SSH_CLIENT` / `$SSH_CONNECTION`) và thêm vào `whitelist_ips` ngay từ đầu.
-- **L4 Stream Gateway Hiệu Năng Cao (Zero-Copy Linux `splice`):**
-  - Chuyển tiếp TCP trực tiếp bằng system call `splice(2)` ở tầng Kernel (giảm copy user-space) cho các dịch vụ như SMB (`445`), SSH, RDP, Database hoặc Web nội bộ.
-- **Giao Diện Quản Trị Hiện Đại (Enterprise Web Dashboard):**
-  - **Dark / Light Theme:** Chuyển đổi mượt mà giữa nền Tối và nền Sáng (tự đồng bộ màu biểu đồ Chart.js, lưu vào `localStorage`).
-  - **Đa Ngôn Ngữ (i18n VI / EN):** Đổi nhanh giữa Tiếng Việt và English trực tiếp trên thanh Header (`mgt/web/i18n.js`).
-  - **100% Tài Nguyên Nhúng (Zero-CDN):** Tailwind CSS, Chart.js, Lucide Icons và i18n được nhúng trực tiếp vào Go binary qua `//go:embed web/*`.
-- **Phòng Thủ Chủ Động & Khóa Luỹ Tiến (Active Defense & Escalation Ban):**
-  - **SSH Guard:** Giám sát nhật ký đăng nhập SSH sai (mặc định 3 lần -> auto-ban).
-  - **Port Canary Honeypot:** Lắng nghe trên các cổng bẫy (`21, 23, 1433, 2222, 3306, 3389, 5060, 5432, 6379, 8088`) để bắt và khóa bot dò quét cổng.
-  - **Suricata IDS Integration:** Theo dõi `/var/log/suricata/eve.json` và tự động chặn IP vi phạm mức nghiêm trọng 1.
-  - **Chính sách khóa luỹ tiến:** Vi phạm lần 1 khóa **24h** (theo `default_ban_ttl_hours`), lần 2 khóa **72h**, lần 3+ khóa **Vĩnh viễn**.
-- **Nhật Ký Tấn Công Bền Vững (Persistent JSONL):** Ghi vào `/var/log/vsafegate/attacks.jsonl` có xoay vòng tự động (Log Rotation 20MB).
+> **Multi-Server Linux Security Gateway & WAF**  
+> Lightweight single-binary Go firewall solution combining **2-Tier Defense** (Linux Kernel `iptables`/`ipset` + Coraza WAF / Zero-Copy `splice(2)` L4 Proxy), an enterprise **Dark/Light Theme** dashboard, **Bilingual UI (English / Vietnamese)**, and **100% embedded local assets** (zero CDN dependencies).
 
 ---
 
-## 📦 HƯỚNG DẪN CÀI ĐẶT & CHẠY SCRIPT (TỪNG BƯỚC)
+## 🚀 KEY FEATURES
 
-### Yêu Cầu Hệ Thống
-- **Hệ điều hành Linux:** Debian, Ubuntu, Proxmox VE (`systemd`), Alpine Linux (`OpenRC`), RHEL/CentOS/Rocky/Alma (`systemd`), hoặc Arch Linux.
-- **Kiến trúc CPU:** `x86_64` (`amd64`) hoặc `aarch64` (`arm64`).
-- **Quyền thực thi:** `root` hoặc `sudo`.
-- **Gói phụ thuộc (script tự cài):** `curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3` (+ `bash` trên Alpine).
-- **Caddy + Coraza WAF (Tùy chọn cho L7 WAF & HTTPS `:4438`):** Daemon quản trị `vsafegate` lắng nghe nội bộ tại `127.0.0.1:9444`. Để bật Reverse Proxy HTTPS `:4438` và L7 WAF `:80`/`:443`, máy chủ cần có Caddy biên dịch kèm plugin `coraza-caddy/v2` (xem **Bước 4** bên dưới).
+- **2-Tier Deep Defense Architecture:**
+  - **Tier 1 (Kernel Level — O(1)):** Packet-level filtering via `iptables` and `ipset` (`vsafegate-blacklist`, `vsafegate-threatintel`, `vsafegate-allowed`, `vsafegate-countries`).
+  - **Tier 2 (Application Level — L7 WAF):** **Caddy + Coraza WAF** powered by **OWASP Core Rule Set (CRS)** and customizable SecLang rules (`/etc/caddy/rules/custom-rules.conf`).
+- **Multi-Server Generalization (Zero Hardcoding):**
+  - **Tri-State GeoIP Policy (`disabled` | `whitelist` | `blacklist`):** Defaults to `disabled` on fresh installations so international VPS administrators are never locked out; switchable to `whitelist` or `blacklist` anytime.
+  - **Auto-Detect Network Interfaces:** Scans physical LAN, Tailscale, WireGuard, ZeroTier, Docker/Bridge subnets and suggests CIDRs to whitelist in one click.
+  - **SSH Anti-Lockout Fail-Safe:** `install.sh` automatically detects the active SSH session IP (`$SSH_CLIENT` / `$SSH_CONNECTION`) and pre-populates `whitelist_ips`.
+- **High-Performance L4 Stream Gateway (Zero-Copy Linux `splice`):**
+  - Forwards raw TCP streams directly in kernel space via `splice(2)` for low-latency services such as SMB (`445`), SSH, RDP, databases, or internal portals.
+- **Modern Enterprise Web Dashboard:**
+  - **Dark / Light Theme:** Instant toggle in the top header with automatic Chart.js grid/legend synchronization and `localStorage` persistence.
+  - **Multi-Language (i18n EN / VI):** Real-time English and Vietnamese switching via embedded `mgt/web/i18n.js`.
+  - **Zero-CDN Embedded UI:** Tailwind CSS, Chart.js, Lucide Icons, and translation dictionaries are compiled directly into the Go binary (`//go:embed web/*`).
+- **Active Defense Watchers & Escalation Ban Policy:**
+  - **SSH Guard:** Monitors failed SSH login attempts (default threshold: 3 attempts -> auto-ban).
+  - **Port Canary Honeypot:** Listens on decoy ports (`21, 23, 1433, 2222, 3306, 3389, 5060, 5432, 6379, 8088`) and automatically bans port scanners.
+  - **Suricata IDS Integration:** Tails `/var/log/suricata/eve.json` and auto-bans Severity 1 alerts when enabled.
+  - **Escalation Ban Policy:** 1st offense bans for **24h** (`default_ban_ttl_hours`), 2nd offense bans for **72h**, 3rd+ offense bans **Permanently**.
+- **Persistent Security Logs (JSONL):** Stored at `/var/log/vsafegate/attacks.jsonl` with automatic 20MB log rotation.
 
 ---
 
-### Cách 1: Cài Đặt Nhanh Bằng 1 Lệnh Từ GitHub (Khuyến Nghị)
+## 📦 INSTALLATION & SCRIPT USAGE (STEP-BY-STEP)
 
-> Áp dụng khi kho GitHub đã có bản phát hành (Release) hoặc bạn muốn tự động cài đặt toàn bộ môi trường & dịch vụ hệ thống.
+### System Requirements
+- **Linux OS:** Debian, Ubuntu, Proxmox VE (`systemd`), Alpine Linux (`OpenRC`), RHEL/CentOS/Rocky/AlmaLinux (`systemd`), or Arch Linux.
+- **CPU Architecture:** `x86_64` (`amd64`) or `aarch64` (`arm64`).
+- **Privileges:** `root` or `sudo`.
+- **System Dependencies (auto-installed by `install.sh`):** `curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3` (+ `bash` on Alpine).
+- **Caddy + Coraza WAF (Optional for L7 WAF & HTTPS `:4438`):** The `vsafegate` management daemon binds locally on `127.0.0.1:9444`. To expose HTTPS `:4438` and L7 WAF sites on `:80`/`:443`, install Caddy built with `coraza-caddy/v2` (see **Step 3** below).
 
-**Bước 1:** Đăng nhập SSH vào máy chủ Linux với quyền `root` hoặc tài khoản có `sudo`.
+---
 
-**Bước 2:** Chạy lệnh cài đặt tự động:
+### Method 1: Quick One-Line Install Script from GitHub (Recommended)
+
+**Step 1:** SSH into your Linux server as `root` or a `sudo`-capable user.
+
+**Step 2:** Run the universal installer script:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.sh | sudo bash
 ```
 
-**Script `install.sh` sẽ tự động thực hiện:**
-1. Kiểm tra quyền `root`, nhận diện kiến trúc (`amd64` / `arm64`), hệ điều hành (`debian` / `alpine` / `rhel` / `arch`) và trình quản lý dịch vụ (`systemd` / `openrc`).
-2. Cài đặt các gói hệ thống cần thiết (`curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3`).
-3. **Chống tự khóa SSH:** Tự đọc IP từ `$SSH_CLIENT` / `$SSH_CONNECTION` và nạp trước vào danh sách `whitelist_ips`.
-4. Tải binary mới nhất từ [GitHub Releases](https://github.com/daovantrong/vSafeGate/releases) vào `/usr/local/bin/vsafegate` (nếu chưa có Release trên GitHub, script sẽ tự tìm binary cục bộ hoặc biên dịch từ `./mgt` nếu máy có Go).
-5. Khởi tạo `/etc/vsafegate/config.json` với trạng thái an toàn (`"geoip_mode": "disabled"`).
-6. Tạo và khởi động service hệ thống (`vsafegate.service` cho `systemd` hoặc `/etc/init.d/vsafegate` cho `OpenRC`) cùng symlink `/usr/bin/vsafegate`.
+**What `install.sh` performs automatically:**
+1. Validates root privileges and detects CPU architecture (`amd64` / `arm64`), OS distribution (`debian` / `alpine` / `rhel` / `arch`), and init system (`systemd` / `openrc`).
+2. Installs required packages (`curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3`).
+3. **Anti-Lockout Protection:** Extracts your current SSH client IP (`$SSH_CLIENT` / `$SSH_CONNECTION`) and adds it to `whitelist_ips`.
+4. Downloads the latest release binary from [GitHub Releases](https://github.com/daovantrong/vSafeGate/releases) into `/usr/local/bin/vsafegate` (or falls back to a local binary / source compilation via `go` if no release tag exists yet).
+5. Generates a safe default `/etc/vsafegate/config.json` with `"geoip_mode": "disabled"`.
+6. Registers and starts the system service (`vsafegate.service` under `systemd`, or `/etc/init.d/vsafegate` under `OpenRC`) and links `/usr/bin/vsafegate`.
 
 ---
 
-### Cách 2: Clone GitHub, Tự Biên Dịch & Chạy Script Cục Bộ
+### Method 2: Clone GitHub Repository, Build & Run Script Locally
 
-Phù hợp khi bạn muốn tự build trực tiếp từ mã nguồn Go (yêu cầu **Go 1.22+**) hoặc khi repo chưa tạo GitHub Release:
+Recommended if you want to build from source (**Go 1.22+** required) or customize the codebase before installing:
 
 ```bash
-# Bước 1: Tải mã nguồn từ GitHub
+# Step 1: Clone the repository
 git clone https://github.com/daovantrong/vSafeGate.git
 cd vSafeGate
 
-# Bước 2: Chạy Unit Test & Biên dịch binary cho máy chủ Linux hiện tại
+# Step 2: Run unit tests and compile the Go binary for your server architecture
 cd mgt
 go test -v ./...
 CGO_ENABLED=0 go build -ldflags="-s -w" -o ../vsafegate-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') .
 cd ..
 
-# Bước 3: Cấp quyền thực thi và chạy script cài đặt
+# Step 3: Make the installer executable and run it
 chmod +x install.sh
 sudo bash install.sh
 ```
 
-> **Cross-compile từ Windows / macOS sang Linux:**
+> **Cross-compiling from Windows / macOS to Linux:**
 > ```powershell
 > cd mgt
 > $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"
 > go build -ldflags="-s -w" -o ../vsafegate-linux-amd64 .
 > ```
-> Sau đó chép file `vsafegate-linux-amd64` và `install.sh` lên máy chủ Linux rồi chạy `sudo bash install.sh`.
+> Then copy `vsafegate-linux-amd64` and `install.sh` to your Linux host and execute `sudo bash install.sh`.
 
 ---
 
-### Bước 3: Cài Đặt Caddy + Coraza WAF (Cho L7 WAF & HTTPS `:4438`)
+### Step 3: Installing Caddy + Coraza WAF (For L7 WAF & HTTPS `:4438`)
 
-`vsafegate` tự động sinh cấu hình `/etc/caddy/Caddyfile` và `/etc/caddy/rules/custom-rules.conf`, sau đó gọi reload `caddy`. Bạn có 2 lựa chọn triển khai Caddy:
+`vsafegate` manages `/etc/caddy/Caddyfile` and `/etc/caddy/rules/custom-rules.conf` automatically and triggers Caddy reloads on rule changes. Choose either option:
 
-- **Lựa chọn A — Build native binary bằng `xcaddy` (Khuyến nghị trên host trực tiếp):**
+- **Option A — Native Caddy binary compiled with `xcaddy` (recommended for bare-metal / VM hosts):**
   ```bash
   go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
   xcaddy build --with github.com/corazawaf/coraza-caddy/v2 --output /usr/bin/caddy
   chmod +x /usr/bin/caddy
   ```
-- **Lựa chọn B — Chạy Caddy + Coraza qua Docker Compose có sẵn trong repo:**
+- **Option B — Docker Compose stack included in the repository:**
   ```bash
   docker compose up -d --build
   ```
 
-> **Lưu ý nếu chưa cài Caddy:** Daemon `vsafegate` vẫn chạy độc lập trên `127.0.0.1:9444` (để bảo vệ L4 Gateway, iptables/ipset, SSH Guard, Canary). Bạn có thể mở giao diện Web an toàn qua SSH Tunnel từ máy cá nhân:
+> **If Caddy is not installed yet:** `vsafegate` still runs standalone on `127.0.0.1:9444` (managing iptables/ipset, L4 Proxy, SSH Guard, and Canary). You can securely open the Web Dashboard via an SSH tunnel:
 > ```bash
 > ssh -L 9444:127.0.0.1:9444 <user>@<SERVER_IP>
-> # Sau đó mở trình duyệt tại: http://127.0.0.1:9444/
+> # Open in your local browser: http://127.0.0.1:9444/
 > ```
 
 ---
 
-### Bước 4: Truy Cập & Cấu Hình Lần Đầu Trên Web Dashboard
+### Step 4: Accessing & Configuring the Web Dashboard
 
-1. Mở trình duyệt truy cập:
-   - Qua Caddy HTTPS: `https://<SERVER_IP>:4438/` (chấp nhận chứng chỉ nội bộ `tls internal` lần đầu)
-   - Hoặc qua SSH Tunnel: `http://127.0.0.1:9444/`
-2. Đăng nhập bằng **tài khoản Linux (PAM / `/etc/shadow`)** của máy chủ (hoặc cấu hình `admin_user` / `admin_password` trong `/etc/vsafegate/config.json`).
-3. Trên thanh Header góc trên bên phải:
-   - Nhấn nút **`🇻🇳 VI` / `🇬🇧 EN`** để chuyển ngôn ngữ.
-   - Nhấn nút **☀️ / 🌙** để chuyển **Light / Dark Theme**.
-4. Vào tab **Quy Tắc Phòng Thủ (Defense Rules)** hoặc **Giám Sát IP (IP Management)**:
-   - Nhấn **`Rule Mẫu Card Mạng`** (Auto-Detect) để nạp nhanh dải mạng LAN/VPN thực tế của máy chủ.
-   - Nếu cần giới hạn quốc gia, chuyển chế độ GeoIP sang **`Whitelist`** hoặc **`Blacklist`** và chọn quốc gia tương ứng.
-5. Vào tab **Website & Proxy** / **Dịch Vụ L4** để thêm các dịch vụ cần bảo vệ.
+1. Open your browser at:
+   - Via Caddy HTTPS proxy: `https://<SERVER_IP>:4438/` (accept the internal self-signed TLS cert on initial access)
+   - Or via SSH tunnel: `http://127.0.0.1:9444/`
+2. Sign in using your **Linux system account** (PAM / `/etc/shadow`) or configure `admin_user` / `admin_password` in `/etc/vsafegate/config.json`.
+3. Use the top-right header toggles:
+   - Click **`🇻🇳 VI` / `🇬🇧 EN`** to switch between English and Vietnamese.
+   - Click **☀️ / 🌙** to toggle **Light / Dark Theme**.
+4. Navigate to **Defense Rules** or **IP Management**:
+   - Click **Interface Presets (`Rule Mẫu Card Mạng`)** to auto-detect and allow your server's LAN/VPN interfaces.
+   - Optionally enable GeoIP **`Whitelist`** or **`Blacklist`** mode for country-level kernel filtering.
+5. Add protected domains in **Sites & Proxy** or TCP forwarding ports in **L4 Services**.
 
 ---
 
-### Cách 3: Chạy Chế Độ Phát Triển (Development Mode)
+### Method 3: Running in Development Mode (`ENV=dev`)
 
-Dùng để thử nghiệm giao diện và API ngay trên máy cá nhân (Windows/Linux/macOS):
+To preview UI changes and test APIs locally on Windows, macOS, or Linux:
 
 ```bash
 cd mgt
 ENV=dev go run .
 ```
-- Đọc/ghi dữ liệu cục bộ tại `./config.json`, `./Caddyfile`, `./rules/custom-rules.conf`, `./attacks.jsonl`.
-- Cho phép đăng nhập nhanh bằng tài khoản dev `admin` / `vsafegate123` (chỉ hoạt động khi `ENV=dev`).
+- Uses local files (`./config.json`, `./Caddyfile`, `./rules/custom-rules.conf`, `./attacks.jsonl`).
+- Enables the development login fallback `admin` / `vsafegate123` (only active when `ENV=dev`).
 
 ---
 
-## 📐 KIẾN TRÚC HỆ THỐNG
+## 📐 SYSTEM ARCHITECTURE
 
 ```mermaid
 flowchart TD
     Client["🌐 Internet / LAN / VPN Traffic"] --> IPTables{"Kernel iptables (INPUT)"}
 
-    subgraph Tier1["TẦNG 1: PHÒNG THỦ TẦNG NHÂN (KERNEL LEVEL O(1))"]
+    subgraph Tier1["TIER 1: KERNEL-LEVEL DEFENSE (O(1))"]
         IPTables --> TrustedIF["Loopback (lo) & Trusted VPN Interfaces"]
         TrustedIF --> SetBlacklist{"vsafegate-blacklist\n(hash:net CIDR)"}
-        SetBlacklist -- "Trùng Blacklist" --> Drop1["⛔ DROP Ngay"]
+        SetBlacklist -- "Matched Blacklist" --> Drop1["⛔ Immediate DROP"]
 
-        SetBlacklist -- "Pass" --> SetThreat{"vsafegate-threatintel\n(Botnet / Scanners)"}
-        SetThreat -- "Trùng Feed" --> Drop2["⛔ DROP Ngay"]
+        SetBlacklist -- "Pass" --> SetThreat{"vsafegate-threatintel\n(Botnets / Scanners)"}
+        SetThreat -- "Matched Feed" --> Drop2["⛔ Immediate DROP"]
 
-        SetThreat -- "Pass" --> RuleHTTP{"Port 80 (HTTP-01)"}
-        RuleHTTP -- "Port 80" --> Accept1["ACCEPT Cho ACME"]
+        SetThreat -- "Pass" --> RuleHTTP{"Port 80 (ACME HTTP-01)"}
+        RuleHTTP -- "Port 80" --> Accept1["ACCEPT for ACME"]
 
-        RuleHTTP -- "Khác" --> SetGeo{"GeoIP Policy\n(Disabled | Whitelist | Blacklist)"}
-        SetGeo -- "Bị từ chối" --> Drop3["⛔ DROP Ngay"]
-        SetGeo -- "Hợp lệ" --> Dispatcher
+        RuleHTTP -- "Other" --> SetGeo{"GeoIP Policy\n(Disabled | Whitelist | Blacklist)"}
+        SetGeo -- "Denied" --> Drop3["⛔ Immediate DROP"]
+        SetGeo -- "Allowed" --> Dispatcher
     end
 
-    subgraph Tier2["TẦNG 2: BẢO VỆ ỨNG DỤNG (L4 & L7 GATEWAY)"]
-        Dispatcher{"Phân Loại Dịch Vụ"}
+    subgraph Tier2["TIER 2: APPLICATION & STREAM GATEWAY (L4 & L7)"]
+        Dispatcher{"Traffic Dispatcher"}
 
         Dispatcher -- "Port 80 / 443" --> CaddyWAF["Caddy Reverse Proxy\n+ Coraza WAF (OWASP CRS + SecLang)"]
-        CaddyWAF -- "Hợp lệ" --> WebUpstream["Backend Web Apps"]
-        CaddyWAF -- "Vi phạm L7" --> Block403["⛔ HTTP 403 Forbidden"]
+        CaddyWAF -- "Clean" --> WebUpstream["Upstream Web Backends"]
+        CaddyWAF -- "L7 Attack" --> Block403["⛔ HTTP 403 Forbidden"]
 
-        Dispatcher -- "Các cổng L4 cấu hình" --> L4Proxy["vSafeGate L4 Gateway\n(Linux splice(2) Zero-Copy)"]
-        L4Proxy --> BackendL4["Backend Internal Services"]
+        Dispatcher -- "Configured L4 Ports" --> L4Proxy["vSafeGate L4 Gateway\n(Linux splice(2) Zero-Copy)"]
+        L4Proxy --> BackendL4["Internal TCP Backends"]
 
-        Dispatcher -- "Port 4438 -> 127.0.0.1:9444" --> AdminPanel["vSafeGate Web Panel\n(Dark/Light + VI/EN + PAM Auth)"]
+        Dispatcher -- "Port 4438 -> 127.0.0.1:9444" --> AdminPanel["vSafeGate Web Dashboard\n(Dark/Light + EN/VI + PAM Auth)"]
     end
 
-    subgraph DefenseEngine["ENGINE PHÒNG THỦ TỰ ĐỘNG (BACKGROUND WATCHERS)"]
-        SSHGuardWatcher["SSH Guard"] --> EscalationBan["Khóa Luỹ Tiến\n(24h -> 72h -> Vĩnh Viễn)"]
+    subgraph DefenseEngine["ACTIVE DEFENSE WATCHERS"]
+        SSHGuardWatcher["SSH Guard"] --> EscalationBan["Escalation Ban Engine\n(24h -> 72h -> Permanent)"]
         CanaryHoneypot["Port Canary Honeypot\n(21,23,1433,2222,3306,3389...)"] --> EscalationBan
         SuricataIDS["Suricata IDS\n(/var/log/suricata/eve.json)"] --> EscalationBan
         EscalationBan --> SetBlacklist
@@ -190,13 +188,13 @@ flowchart TD
 
 ---
 
-## 🤖 PHÁT HÀNH TỰ ĐỘNG QUA GITHUB ACTIONS (CI/CD)
+## 🤖 AUTOMATED GITHUB RELEASES (CI/CD)
 
-Kho mã nguồn đã tích hợp workflow [`.github/workflows/release.yml`](.github/workflows/release.yml). Khi bạn đẩy một Git tag mới (ví dụ `v2.1.0`), GitHub Actions sẽ tự động:
-1. Chạy toàn bộ unit test (`cd mgt && go test -v ./...`).
-2. Biên dịch chéo binary không phụ thuộc (`CGO_ENABLED=0`) cho **`linux/amd64`** và **`linux/arm64`**.
-3. Tạo file kiểm tra toàn vẹn `sha256sums.txt`.
-4. Tạo **GitHub Release** mới đính kèm `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `sha256sums.txt` và `install.sh` — giúp người dùng chạy được ngay lệnh `curl ... install.sh | sudo bash`.
+This repository includes [`.github/workflows/release.yml`](.github/workflows/release.yml). Pushing a version tag (e.g., `v2.1.0`) automatically:
+1. Executes all Go unit tests (`cd mgt && go test -v ./...`).
+2. Cross-compiles static binaries (`CGO_ENABLED=0`) for **`linux/amd64`** and **`linux/arm64`**.
+3. Generates `sha256sums.txt`.
+4. Publishes a **GitHub Release** with `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `sha256sums.txt`, and `install.sh`, enabling immediate one-line installs via `install.sh`.
 
 ```bash
 git tag v2.1.0
@@ -205,46 +203,46 @@ git push origin v2.1.0
 
 ---
 
-## 📁 CẤU TRÚC THƯ MỤC DỰ ÁN
+## 📁 PROJECT STRUCTURE
 
 ```text
 vSafeGate/
 ├── .github/workflows/
-│   └── release.yml             # CI/CD tự động test, build amd64/arm64 và tạo GitHub Release
-├── install.sh                  # Script cài đặt vạn năng 1 dòng (Systemd & OpenRC)
-├── README.md                   # Tài liệu hướng dẫn Tiếng Việt
-├── README.en.md                # Tài liệu hướng dẫn Tiếng Anh
-├── SERVERS.md                  # Tài liệu mẫu danh mục máy chủ & ánh xạ cổng
-├── Dockerfile                  # Build Caddy 2.8 kèm Coraza WAF plugin
-├── docker-compose.yml          # Triển khai Caddy + Coraza container
-├── Caddyfile                   # Mẫu Caddyfile khởi tạo cho Docker
+│   └── release.yml             # CI/CD workflow for multi-arch tests, builds, and GitHub Releases
+├── install.sh                  # Universal one-line installer (systemd & OpenRC)
+├── README.md                   # Vietnamese documentation
+├── README.en.md                # English documentation
+├── SERVERS.md                  # Server inventory & port mapping template
+├── Dockerfile                  # Builds Caddy 2.8 with Coraza WAF plugin
+├── docker-compose.yml          # Container deployment for Caddy + Coraza
+├── Caddyfile                   # Starter Caddyfile for Docker deployment
 ├── rules/
-│   └── custom-rules.conf       # Quy tắc WAF Coraza SecLang tùy biến
-└── mgt/                        # Mã nguồn Go của vSafeGate Management Daemon
-    ├── main.go                 # HTTP API, khởi tạo mặc định an toàn & nhúng giao diện Web
-    ├── models.go               # Cấu trúc dữ liệu Config, AttackLog, L4/L7, Presets
-    ├── auth.go                 # Xác thực PAM/Shadow (`/usr/local/bin/vsafegate-auth`) & PBKDF-SHA256
-    ├── blacklist.go            # Quản lý Blacklist, TTL Auto-Unban & Khóa luỹ tiến
-    ├── caddy.go                # Tự động sinh Caddyfile & Custom Rules (Debounced Reload)
-    ├── firewall.go             # Đồng bộ iptables & ipset (Disabled / Whitelist / Blacklist)
-    ├── l4proxy.go              # L4 TCP Gateway tối ưu hóa bằng Linux splice(2)
-    ├── log_manager.go          # Nhật ký attacks.jsonl bền vững kèm Log Rotation (20MB)
-    ├── network_detector.go     # Tự động phát hiện card mạng LAN / VPN trên máy chủ
-    ├── watchers.go             # SSH Guard, Port Canary Honeypot & Suricata EVE Watcher
-    ├── *_test.go               # Bộ Unit Tests kiểm tra deadlock, blacklist, log, network detector
-    └── web/                    # Tài nguyên Web nhúng trực tiếp vào binary
-        ├── index.html          # Giao diện Dashboard (Dark / Light Theme)
-        ├── i18n.js             # Bộ từ điển & engine đa ngôn ngữ (VI / EN)
-        ├── tailwind.min.css    # Tailwind CSS biên dịch sẵn (0 CDN)
-        ├── chart.min.js        # Chart.js cục bộ
-        └── lucide.min.js       # Lucide Icons cục bộ
+│   └── custom-rules.conf       # Custom Coraza SecLang WAF rules
+└── mgt/                        # Go source code for vSafeGate Management Daemon
+    ├── main.go                 # HTTP API, safe defaults & embedded web UI server
+    ├── models.go               # Data models for Config, AttackLog, L4/L7 services, Presets
+    ├── auth.go                 # Linux PAM/Shadow helper & PBKDF-SHA256 authentication
+    ├── blacklist.go            # Blacklist management, TTL countdown & Escalation Ban
+    ├── caddy.go                # Caddyfile & SecLang generator with debounced hot-reload
+    ├── firewall.go             # iptables & ipset sync (Disabled / Whitelist / Blacklist)
+    ├── l4proxy.go              # Zero-Copy Linux splice(2) L4 TCP Gateway
+    ├── log_manager.go          # Persistent attacks.jsonl logger with 20MB rotation
+    ├── network_detector.go     # Host LAN / VPN interface auto-detection
+    ├── watchers.go             # SSH Guard, Port Canary Honeypot & Suricata EVE watcher
+    ├── *_test.go               # Unit tests (deadlock safety, blacklist, logs, detector)
+    └── web/                    # Embedded dashboard assets (zero-CDN)
+        ├── index.html          # Responsive Web UI (Dark / Light Theme)
+        ├── i18n.js             # Bilingual translation dictionary & engine (EN / VI)
+        ├── tailwind.min.css    # Precompiled Tailwind CSS
+        ├── chart.min.js        # Local Chart.js
+        └── lucide.min.js       # Local Lucide Icons
 ```
 
 ---
 
-## 🛠️ VẬN HÀNH & KIỂM TRA HỆ THỐNG
+## 🛠️ OPERATIONS & VERIFICATION COMMANDS
 
-### 1. Quản Lý Dịch Vụ
+### 1. Service Management
 - **Debian / Ubuntu / Proxmox / RHEL / Arch (`systemd`):**
   ```bash
   sudo systemctl status vsafegate
@@ -257,24 +255,24 @@ vSafeGate/
   sudo rc-service vsafegate restart
   ```
 
-### 2. Kiểm Tra Tường Lửa Kernel (`ipset` & `iptables`)
+### 2. Inspect Kernel Firewall (`ipset` & `iptables`)
 ```bash
-# Xem danh sách IP/CIDR trong Allowlist & Blacklist
+# View allowed and blacklisted IP/CIDR entries
 sudo ipset list vsafegate-allowed | head -n 20
 sudo ipset list vsafegate-blacklist
 
-# Xem thứ tự các rule iptables INPUT
+# Inspect iptables INPUT chain ordering
 sudo iptables -L INPUT -n --line-numbers
 ```
 
-### 3. Kiểm Thử Phòng Thủ WAF & L4 Gateway
+### 3. Verify WAF & L4 Protection
 ```bash
-# Test 1: Kiểm tra WAF chặn SQL Injection (Kỳ vọng HTTP 403 Forbidden nếu đã cấu hình Site & Caddy)
+# Test 1: Verify Coraza WAF blocks SQL Injection (expects HTTP 403 once Site & Caddy are configured)
 curl -k -i -H "Host: app.example.com" "https://<GATEWAY_IP>/?id=1%20UNION%20SELECT%20null,null"
 
-# Test 2: Kiểm tra WAF chặn Security Scanner UA
+# Test 2: Verify WAF blocks security scanner User-Agent
 curl -k -i -A "sqlmap/1.8" -H "Host: app.example.com" "https://<GATEWAY_IP>/"
 
-# Test 3: Kiểm tra cổng L4 Gateway đã khai báo
+# Test 3: Verify configured L4 Gateway port connectivity
 nc -zv <GATEWAY_IP> <L4_PORT>
 ```
