@@ -309,12 +309,17 @@ ensure_source() {
     fi
 }
 
-# Stop existing services cleanly before replacing binaries (avoids Text file busy)
+# Stop existing services cleanly & retire any legacy standalone caddy service (vsafegate supervises Caddy now)
 if [ "$INIT_SYSTEM" = "systemd" ]; then
     systemctl stop vsafegate caddy >/dev/null 2>&1 || true
+    systemctl disable caddy >/dev/null 2>&1 || true
+    rm -f /etc/systemd/system/caddy.service
+    systemctl daemon-reload >/dev/null 2>&1 || true
 elif [ "$INIT_SYSTEM" = "openrc" ]; then
     rc-service vsafegate stop >/dev/null 2>&1 || true
     rc-service caddy stop >/dev/null 2>&1 || true
+    rc-update del caddy default >/dev/null 2>&1 || true
+    rm -f /etc/init.d/caddy
 fi
 
 mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$CADDY_DIR" "$CADDY_RULES_DIR" "$CADDY_LOG_DIR" /usr/local/bin /usr/bin
@@ -514,12 +519,12 @@ if [ -f /usr/local/bin/vsafegate-uninstall ]; then
     chmod 755 /usr/local/bin/vsafegate-uninstall
 fi
 
-# 9. Configure & Start Services (vSafeGate + Caddy)
-echo -e "${BLUE}[7/8] Configuring & starting ${INIT_SYSTEM} services...${NC}"
+# 9. Configure & Start Unified Single Service (vsafegate supervises Caddy directly)
+echo -e "${BLUE}[7/8] Configuring & starting unified ${INIT_SYSTEM} service (vsafegate + embedded Caddy supervisor)...${NC}"
 if [ "$INIT_SYSTEM" = "systemd" ]; then
     cat <<EOF > /etc/systemd/system/vsafegate.service
 [Unit]
-Description=vSafeGate Virtual Security Gateway & WAF Daemon
+Description=vSafeGate Unified Security Gateway, L4 Proxy & Managed Caddy WAF
 After=network.target network-online.target
 Wants=network-online.target
 
@@ -528,24 +533,7 @@ Type=simple
 ExecStart=${INSTALL_BIN}
 Restart=always
 RestartSec=3
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    cat <<EOF > /etc/systemd/system/caddy.service
-[Unit]
-Description=Caddy with Coraza WAF (vSafeGate L7 Core)
-After=network.target network-online.target vsafegate.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=${CADDY_BIN} run --environ --config ${CADDY_DIR}/Caddyfile
-ExecReload=${CADDY_BIN} reload --config ${CADDY_DIR}/Caddyfile --force
-Restart=always
-RestartSec=3
+TimeoutStopSec=15
 LimitNOFILE=1048576
 
 [Install]
@@ -553,19 +541,18 @@ WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable vsafegate caddy >/dev/null 2>&1
+    systemctl enable vsafegate >/dev/null 2>&1
     systemctl restart vsafegate
-    sleep 1
-    systemctl restart caddy
-    echo -e "${GREEN}[OK] Systemd services (vsafegate & caddy) active.${NC}"
+    echo -e "${GREEN}[OK] Unified systemd service (vsafegate + managed Caddy L7) active.${NC}"
 elif [ "$INIT_SYSTEM" = "openrc" ]; then
     cat <<EOF > /etc/init.d/vsafegate
 #!/sbin/openrc-run
 name="vsafegate"
-description="vSafeGate Virtual Security Gateway & WAF"
+description="vSafeGate Unified Security Gateway & Managed Caddy WAF"
 command="${INSTALL_BIN}"
 command_background="true"
 pidfile="/run/vsafegate.pid"
+retry="TERM/10/KILL/5"
 
 depend() {
     need net
@@ -573,35 +560,10 @@ depend() {
 }
 EOF
 
-    cat <<EOF > /etc/init.d/caddy
-#!/sbin/openrc-run
-name="caddy"
-description="Caddy Web Server with Coraza WAF"
-command="${CADDY_BIN}"
-command_args="run --config ${CADDY_DIR}/Caddyfile"
-command_background="true"
-pidfile="/run/caddy.pid"
-extra_started_commands="reload"
-
-depend() {
-    need net vsafegate
-    after firewall
-}
-
-reload() {
-    ebegin "Reloading \$name"
-    ${CADDY_BIN} reload --config ${CADDY_DIR}/Caddyfile --force >/dev/null 2>&1
-    eend \$?
-}
-EOF
-
-    chmod +x /etc/init.d/vsafegate /etc/init.d/caddy
+    chmod +x /etc/init.d/vsafegate
     rc-update add vsafegate default >/dev/null 2>&1 || true
-    rc-update add caddy default >/dev/null 2>&1 || true
     rc-service vsafegate restart
-    sleep 1
-    rc-service caddy restart
-    echo -e "${GREEN}[OK] OpenRC services (vsafegate & caddy) active.${NC}"
+    echo -e "${GREEN}[OK] Unified OpenRC service (vsafegate + managed Caddy L7) active.${NC}"
 fi
 
 echo -e "${BLUE}[8/8] Syncing initial Threat Intelligence feed (background-safe)...${NC}"
@@ -621,5 +583,5 @@ echo -e "  🛡️  ${BOLD}Caddy & WAF Rules:${NC}    ${CADDY_DIR}/Caddyfile & $
 echo -e "  📜 ${BOLD}Attack Log Stream:${NC}    ${LOG_DIR}/attacks.jsonl"
 echo -e "  🔄 ${BOLD}One-Line Updater:${NC}     ${YELLOW}sudo vsafegate-update${NC}"
 echo -e "  🧹 ${BOLD}Clean Uninstaller:${NC}    ${YELLOW}sudo vsafegate-uninstall${NC} (or ${YELLOW}--purge${NC})"
-echo -e "  ⚙️  ${BOLD}Service Control:${NC}      ${YELLOW}systemctl status vsafegate caddy${NC} / ${YELLOW}rc-service vsafegate status${NC}"
+echo -e "  ⚙️  ${BOLD}Single Service Ctrl:${NC}  ${YELLOW}sudo systemctl status|restart vsafegate${NC} / ${YELLOW}sudo rc-service vsafegate status${NC}"
 echo -e "${GREEN}${BOLD}========================================================================${NC}\n"

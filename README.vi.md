@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.
 5. **Cài đặt `Caddy + Coraza WAF`:** Tự tải Caddy tích hợp sẵn `coraza-caddy/v2` (hoặc **tự động biên dịch qua `xcaddy`**) vào `/usr/bin/caddy`, chạy ngay L7 WAF (`:80`/`:443`) và HTTPS Dashboard (`:4438`).
 6. **Cấu hình an toàn đa server:** Tạo `/etc/vsafegate/config.json` với `"geoip_mode": "disabled"` (không tự khóa VPS ở nước ngoài).
 7. **Kích hoạt Threat Intelligence tự động:** Cài `/usr/local/bin/vsafegate-sync-threatintel.sh`, lập lịch cron hằng ngày và đồng bộ ngay bảng chặn `vsafegate-threatintel`.
-8. **Đăng ký & Khởi chạy dịch vụ:** Tạo và bật đồng thời service `vsafegate` + `caddy`, kèm lệnh cập nhật nhanh `sudo vsafegate-update`.
+8. **Đăng ký & Khởi chạy duy nhất 1 dịch vụ:** Chỉ tạo và bật **`vsafegate`** (`systemd` / `OpenRC`); tiến trình này tự động khởi chạy, giám sát, tự phục hồi và reload Caddy L7 WAF — kèm lệnh `sudo vsafegate-update` và `sudo vsafegate-uninstall`.
 
 ---
 
@@ -220,17 +220,18 @@ vSafeGate/
 
 ## 🛠️ VẬN HÀNH & KIỂM TRA HỆ THỐNG
 
-### 1. Quản Lý Dịch Vụ
+### 1. Quản Lý Dịch Vụ (Chỉ 1 Service Duy Nhất)
+`vsafegate` trực tiếp khởi chạy, giám sát, tự khôi phục và reload tiến trình con `caddy` — bạn chỉ cần thao tác trên **đúng 1 dịch vụ `vsafegate`**:
 - **Debian / Ubuntu / Proxmox / RHEL / Arch (`systemd`):**
   ```bash
-  sudo systemctl status vsafegate caddy
-  sudo systemctl restart vsafegate caddy
+  sudo systemctl status vsafegate
+  sudo systemctl restart vsafegate
   sudo journalctl -u vsafegate -f
   ```
 - **Alpine Linux (`OpenRC`):**
   ```bash
-  sudo rc-service vsafegate status && sudo rc-service caddy status
-  sudo rc-service vsafegate restart && sudo rc-service caddy restart
+  sudo rc-service vsafegate status
+  sudo rc-service vsafegate restart
   ```
 
 ### 2. Kiểm Tra Tường Lửa Kernel (`ipset` & `iptables`)

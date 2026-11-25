@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -11,11 +12,14 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -23,21 +27,22 @@ import (
 var webFiles embed.FS
 
 type AppState struct {
-	mu             sync.RWMutex
-	config         Config
-	configPath     string
-	caddyPath      string
-	rulesPath      string
-	logsPath       string
-	recentLogs     []AttackLog
-	bannedMap      map[string]*BannedIPEntry
-	sessions       map[string]Session
-	sessionsMu     sync.RWMutex
-	sshBannedCount int64
-	portScanCount  int64
-	logManager     *PersistentLogManager
-	reloadManager  *ReloadManager
-	offenseCount   map[string]int
+	mu              sync.RWMutex
+	config          Config
+	configPath      string
+	caddyPath       string
+	rulesPath       string
+	logsPath        string
+	recentLogs      []AttackLog
+	bannedMap       map[string]*BannedIPEntry
+	sessions        map[string]Session
+	sessionsMu      sync.RWMutex
+	sshBannedCount  int64
+	portScanCount   int64
+	logManager      *PersistentLogManager
+	reloadManager   *ReloadManager
+	caddySupervisor *CaddySupervisor
+	offenseCount    map[string]int
 }
 
 var state *AppState
@@ -352,6 +357,10 @@ func main() {
 
 	state = initDefaults(configPath, caddyPath, rulesPath, logsPath)
 	state.generateCaddyAndRules()
+	if runtime.GOOS == "linux" && os.Getenv("ENV") != "dev" {
+		state.caddySupervisor = NewCaddySupervisor(caddyPath)
+		state.caddySupervisor.Start()
+	}
 	state.startLogWatcher()
 	startCPUMonitor()
 	state.startSSHWatcher()
@@ -812,7 +821,13 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 
 		caddyStatus := "inactive"
-		if isProcessRunning("caddy") || isServiceActive("caddy") {
+		caddyManaged := false
+		if state.caddySupervisor != nil {
+			caddyManaged = state.caddySupervisor.IsManaged()
+			if state.caddySupervisor.IsRunning() {
+				caddyStatus = "running"
+			}
+		} else if isProcessRunning("caddy") || isServiceActive("caddy") {
 			caddyStatus = "running"
 		}
 
@@ -834,10 +849,11 @@ func main() {
 		l4Manager.mu.Unlock()
 
 		json.NewEncoder(w).Encode(map[string]interface{}{
-			"caddy_waf":    caddyStatus,
-			"nftables_fw":  fwStatus,
-			"suricata_ids": suricataStatus,
-			"l4_gateway":   l4Status,
+			"caddy_waf":     caddyStatus,
+			"caddy_managed": caddyManaged,
+			"nftables_fw":   fwStatus,
+			"suricata_ids":  suricataStatus,
+			"l4_gateway":    l4Status,
 		})
 	}))
 
@@ -865,11 +881,20 @@ func main() {
 			}
 		}
 
+		var caddyManaged bool
+		var caddyRestarts int64
+		if state.caddySupervisor != nil {
+			caddyManaged = state.caddySupervisor.IsManaged()
+			caddyRestarts = state.caddySupervisor.RestartCount()
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"version":         AppVersion,
 			"status":          fmt.Sprintf("ACTIVE (%s)", initSystem),
 			"engine":          "OWASP Coraza v4 + Caddy Core",
+			"caddy_managed":   caddyManaged,
+			"caddy_restarts":  caddyRestarts,
 			"sites_count":     len(state.config.Sites),
 			"rules_count":     len(state.config.Rules),
 			"blacklist_count": bannedCount,
@@ -1461,11 +1486,33 @@ func main() {
 		fmt.Printf("Web Panel: Port %d\n", state.config.MgmtHTTPSPort)
 	}
 	fmt.Printf("Auth Method: Linux System Accounts (PAM / shadow) & Admin Config\n")
-	fmt.Printf("Active Defenses: SSH Guard, Canary, GeoIP, Auto-Ban TTL (%dh)\n", state.config.DefaultBanTTL)
+	fmt.Printf("Active Defenses: Caddy L7 Supervisor, SSH Guard, Canary, GeoIP, Auto-Ban TTL (%dh)\n", state.config.DefaultBanTTL)
 	fmt.Printf("Persistent Log: %s\n", logsPath)
 	fmt.Printf("=====================================================\n")
 
-	if err := http.ListenAndServe(port, mux); err != nil {
+	srv := &http.Server{
+		Addr:    port,
+		Handler: mux,
+	}
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		sig := <-sigCh
+		log.Printf("[Shutdown] Received signal %v, stopping managed services cleanly...", sig)
+		if state.caddySupervisor != nil {
+			state.caddySupervisor.Stop()
+		}
+		l4Manager.Sync(nil)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	}()
+
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if state.caddySupervisor != nil {
+			state.caddySupervisor.Stop()
+		}
 		log.Fatalf("Server failed: %v", err)
 	}
 }

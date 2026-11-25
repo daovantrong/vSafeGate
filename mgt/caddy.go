@@ -290,14 +290,18 @@ SecRule REQUEST_URI "%s %s" \
 	}
 	os.Rename(tmpCaddy, s.caddyPath)
 
-	// Reload Caddy service safely (Linux only)
+	// Reload Caddy safely (Linux: direct reload under CaddySupervisor or external fallback)
 	if runtime.GOOS == "linux" {
-		if _, err := exec.LookPath("systemctl"); err == nil {
+		if s.caddySupervisor != nil {
+			if err := s.caddySupervisor.Reload(); err != nil && s.caddySupervisor.IsRunning() {
+				log.Printf("[Caddy] Reload failed: %v", err)
+			}
+		} else if bin := findCaddyBinary(); bin != "" && isAddrListening("127.0.0.1:2019") {
+			exec.Command(bin, "reload", "--config", s.caddyPath, "--force").Run()
+		} else if _, err := exec.LookPath("systemctl"); err == nil {
 			exec.Command("systemctl", "reload", "caddy").Run()
 		} else if _, err := exec.LookPath("rc-service"); err == nil {
 			exec.Command("rc-service", "caddy", "reload").Run()
-		} else {
-			exec.Command("caddy", "reload", "--config", s.caddyPath).Run()
 		}
 	}
 	return nil

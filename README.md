@@ -56,7 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.
 5. **Installs `Caddy + Coraza WAF`:** Downloads the prebuilt Caddy binary compiled with `coraza-caddy/v2` (or **automatically builds it via `xcaddy`**) to `/usr/bin/caddy`, enabling L7 WAF (`:80`/`:443`) and HTTPS Admin Proxy (`:4438`) immediately.
 6. **Multi-Server Safe Configuration:** Generates `/etc/vsafegate/config.json` with `"geoip_mode": "disabled"` so international administrators are never locked out.
 7. **Automated Threat Intelligence Sync:** Installs `/usr/local/bin/vsafegate-sync-threatintel.sh`, adds a daily cron job, and runs the initial `vsafegate-threatintel` sync.
-8. **Registers & Starts Services:** Creates and enables both `vsafegate` and `caddy` services (`systemd` / `OpenRC`), plus installs `sudo vsafegate-update` for one-command upgrades.
+8. **Registers & Starts One Unified Service:** Creates and starts **`vsafegate`** (`systemd` / `OpenRC`), which automatically launches, supervises, auto-heals, and reloads Caddy L7 WAF directly — plus installs `sudo vsafegate-update` and `sudo vsafegate-uninstall`.
 
 ---
 
@@ -220,17 +220,18 @@ vSafeGate/
 
 ## 🛠️ OPERATIONS & VERIFICATION COMMANDS
 
-### 1. Service Management
+### 1. Service Management (Single Unified Service)
+`vsafegate` automatically supervises the `caddy` L7 WAF child process (auto-start, crash recovery, direct reload, and clean `SIGTERM` shutdown). You only need to manage **one service**:
 - **Debian / Ubuntu / Proxmox / RHEL / Arch (`systemd`):**
   ```bash
-  sudo systemctl status vsafegate caddy
-  sudo systemctl restart vsafegate caddy
+  sudo systemctl status vsafegate
+  sudo systemctl restart vsafegate
   sudo journalctl -u vsafegate -f
   ```
 - **Alpine Linux (`OpenRC`):**
   ```bash
-  sudo rc-service vsafegate status && sudo rc-service caddy status
-  sudo rc-service vsafegate restart && sudo rc-service caddy restart
+  sudo rc-service vsafegate status
+  sudo rc-service vsafegate restart
   ```
 
 ### 2. Inspect Kernel Firewall (`ipset` & `iptables`)
