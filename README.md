@@ -70,11 +70,16 @@ curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.
    - Click **☀️ / 🌙** to toggle **Light / Dark Theme**.
 4. Go to **Defense Rules** → click **Interface Presets (`Rule Mẫu Card Mạng`)** to auto-detect and allow your host's LAN/VPN interfaces, and configure GeoIP or L4/L7 services as needed.
 
-### One-Command Upgrade
+### One-Command Upgrade & Uninstall
 ```bash
+# Upgrade / Repair (preserves /etc/vsafegate/config.json)
 sudo vsafegate-update
+
+# Uninstall cleanly (auto-backups config to /var/backups/vsafegate/)
+sudo vsafegate-uninstall
+# Or via one-line curl from GitHub (use --purge to delete backups too):
+curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.sh | sudo bash -s -- --uninstall
 ```
-*(Automatically downloads/builds the latest version and restarts `vsafegate` & `caddy` while **preserving** `/etc/vsafegate/config.json`)*
 
 ---
 

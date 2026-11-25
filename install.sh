@@ -48,6 +48,34 @@ if [ -f "./VERSION" ]; then
     VSAFE_VER=$(tr -d '[:space:]' < ./VERSION)
 fi
 
+ACTION="install"
+PURGE=false
+SCRIPT_BASENAME="$(basename "${0:-install.sh}")"
+case "$SCRIPT_BASENAME" in
+    *vsafegate-uninstall*)
+        ACTION="uninstall"
+        ;;
+esac
+
+for arg in "$@"; do
+    case "$arg" in
+        --uninstall|uninstall)
+            ACTION="uninstall"
+            ;;
+        --purge|-y|--yes)
+            PURGE=true
+            ;;
+        --help|-h)
+            echo "vSafeGate v${VSAFE_VER} Installer & Uninstaller"
+            echo "Usage: bash install.sh [OPTIONS]"
+            echo "  (default)     Install or upgrade vSafeGate + Caddy Coraza WAF"
+            echo "  --uninstall   Stop services, remove rules/binaries, backup config to /var/backups/vsafegate"
+            echo "  --purge       Combined with --uninstall: also delete config backups permanently"
+            exit 0
+            ;;
+    esac
+done
+
 echo -e "${CYAN}${BOLD}"
 echo "  __      __ _____        __         _____       _        "
 echo "  \ \    / // ____|      / _|       / ____|     | |       "
@@ -56,16 +84,16 @@ echo "    \ \/ /  \___ \ / _\` |  _/ _ \  | | |_ |/ _\` | __/ _ \ "
 echo "     \  /   ____) | (_| | ||  __/  | |__| | (_| | ||  __/ "
 echo "      \/   |_____/ \__,_|_| \___|   \_____|\__,_|\__\___| "
 echo -e "${NC}"
-echo -e "${GREEN}==> vSafeGate v${VSAFE_VER} Automated Installer (Vendored & Reproducible)${NC}\n"
+echo -e "${GREEN}==> vSafeGate v${VSAFE_VER} Manager (Vendored & Reproducible)${NC}\n"
 
 # 1. Check Root Privileges
 if [ "$(id -u)" -ne 0 ]; then
-    echo -e "${RED}[ERROR] This installer must be run as root.${NC}"
-    echo -e "Please run: ${YELLOW}curl -fsSL ${RAW_URL}/install.sh | sudo bash${NC}"
+    echo -e "${RED}[ERROR] This script must be run as root.${NC}"
+    echo -e "Please run with ${YELLOW}sudo${NC}."
     exit 1
 fi
 
-# 2. Detect CPU Architecture
+# 2. Detect CPU Architecture & Init System
 ARCH=$(uname -m)
 case "$ARCH" in
     x86_64|amd64)
@@ -75,13 +103,14 @@ case "$ARCH" in
         TARGET_ARCH="arm64"
         ;;
     *)
-        echo -e "${RED}[ERROR] Unsupported CPU architecture: $ARCH (supports amd64 / arm64).${NC}"
-        exit 1
+        if [ "$ACTION" = "install" ]; then
+            echo -e "${RED}[ERROR] Unsupported CPU architecture: $ARCH (supports amd64 / arm64).${NC}"
+            exit 1
+        fi
+        TARGET_ARCH="$ARCH"
         ;;
 esac
-echo -e "${BLUE}[1/8] Architecture:${NC} ${BOLD}${TARGET_ARCH}${NC}"
 
-# 3. Detect Operating System & Init System
 INIT_SYSTEM="systemd"
 if [ -f /etc/alpine-release ]; then
     OS="alpine"
@@ -101,6 +130,94 @@ if [ "$OS" != "alpine" ] && ! command -v systemctl >/dev/null 2>&1; then
         INIT_SYSTEM="openrc"
     fi
 fi
+
+do_uninstall() {
+    echo -e "${YELLOW}[1/5] Stopping and disabling vSafeGate & Caddy services (${INIT_SYSTEM})...${NC}"
+    if [ "$INIT_SYSTEM" = "systemd" ]; then
+        systemctl stop vsafegate caddy >/dev/null 2>&1 || true
+        systemctl disable vsafegate caddy >/dev/null 2>&1 || true
+        rm -f /etc/systemd/system/vsafegate.service /etc/systemd/system/caddy.service
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        systemctl reset-failed >/dev/null 2>&1 || true
+    elif [ "$INIT_SYSTEM" = "openrc" ]; then
+        rc-service vsafegate stop >/dev/null 2>&1 || true
+        rc-service caddy stop >/dev/null 2>&1 || true
+        rc-update del vsafegate default >/dev/null 2>&1 || true
+        rc-update del caddy default >/dev/null 2>&1 || true
+        rm -f /etc/init.d/vsafegate /etc/init.d/caddy
+    fi
+    echo -e "${GREEN}[OK] Services stopped and removed.${NC}"
+
+    BACKUP_MSG="Removed permanently (--purge)"
+    if [ "$PURGE" = false ] && [ -f "$CONFIG_FILE" ]; then
+        BACKUP_DIR="/var/backups/vsafegate"
+        BACKUP_FILE="${BACKUP_DIR}/config.json.$(date +%Y%m%d-%H%M%S).bak"
+        mkdir -p "$BACKUP_DIR"
+        cp -f "$CONFIG_FILE" "$BACKUP_FILE"
+        BACKUP_MSG="Saved backup to ${BACKUP_FILE}"
+        echo -e "${BLUE}[INFO] Configuration backed up to ${BACKUP_FILE}${NC}"
+    elif [ "$PURGE" = true ]; then
+        rm -rf /var/backups/vsafegate
+    fi
+
+    echo -e "${YELLOW}[2/5] Removing binaries, helper scripts, and cron jobs...${NC}"
+    rm -f "$INSTALL_BIN" /usr/local/bin/vsafegate-auth /usr/local/bin/vsafegate-sync-threatintel.sh \
+          /usr/local/bin/vsafegate-update /usr/bin/vsafegate \
+          /etc/cron.daily/vsafegate-threatintel /etc/periodic/daily/vsafegate-threatintel
+
+    if [ -f "$CADDY_BIN" ] || [ -f /usr/local/bin/caddy ]; then
+        if grep -q "vSafeGate" /etc/caddy/Caddyfile 2>/dev/null || \
+           ("$CADDY_BIN" list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza)") || \
+           (/usr/local/bin/caddy list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza)"); then
+            rm -f "$CADDY_BIN" /usr/local/bin/caddy
+        fi
+    fi
+    echo -e "${GREEN}[OK] Binaries and cron jobs removed.${NC}"
+
+    echo -e "${YELLOW}[3/5] Removing configuration directories and logs...${NC}"
+    rm -rf "$CONFIG_DIR" "$CADDY_DIR" "$LOG_DIR" "$CADDY_LOG_DIR"
+    echo -e "${GREEN}[OK] Configs and logs cleaned up.${NC}"
+
+    echo -e "${YELLOW}[4/5] Removing vSafeGate iptables rules & kernel ipsets...${NC}"
+    if command -v iptables >/dev/null 2>&1; then
+        while iptables -D INPUT -i tailscale+ -j ACCEPT 2>/dev/null; do :; done
+        while iptables -D INPUT -i zt+ -j ACCEPT 2>/dev/null; do :; done
+        while iptables -D INPUT -p udp --dport 41641 -j ACCEPT 2>/dev/null; do :; done
+        while iptables -D INPUT -p udp --dport 9993 -j ACCEPT 2>/dev/null; do :; done
+        while iptables -D INPUT -m set --match-set vsafegate-blacklist src -j DROP 2>/dev/null; do :; done
+        while iptables -D INPUT -m set --match-set vsafegate-threatintel src -j DROP 2>/dev/null; do :; done
+        while iptables -D INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null; do :; done
+        while iptables -D INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m conntrack --ctstate NEW -m set ! --match-set vsafegate-allowed src -j DROP 2>/dev/null; do :; done
+        while iptables -D INPUT ! -i tailscale+ ! -i zt+ ! -i lo -m set --match-set vsafegate-countries src -j DROP 2>/dev/null; do :; done
+        while iptables -D INPUT -m set --match-set vsafegate-countries src -j DROP 2>/dev/null; do :; done
+        while iptables -D INPUT -p tcp -m multiport --dports 2251,22222,22 -j ACCEPT 2>/dev/null; do :; done
+        while iptables -D INPUT -p tcp -m multiport --dports 22,22222 -j ACCEPT 2>/dev/null; do :; done
+    fi
+
+    if command -v ipset >/dev/null 2>&1; then
+        for s in vsafegate-blacklist vsafegate-blacklist-tmp vsafegate-threatintel vsafegate-threatintel-tmp vsafegate-countries vsafegate-allowed; do
+            ipset destroy "$s" 2>/dev/null || true
+        done
+    fi
+    echo -e "${GREEN}[OK] Firewall rules and ipsets cleaned.${NC}"
+
+    echo -e "${YELLOW}[5/5] Finalizing uninstaller cleanup...${NC}"
+    rm -f /usr/local/bin/vsafegate-uninstall
+
+    echo -e "\n${GREEN}${BOLD}========================================================================${NC}"
+    echo -e "${GREEN}${BOLD}   🧹 vSafeGate Uninstalled & Cleaned Successfully!${NC}"
+    echo -e "${GREEN}${BOLD}========================================================================${NC}"
+    echo -e "  📦 ${BOLD}Config Status:${NC}  ${BACKUP_MSG}"
+    echo -e "  🛡️  ${BOLD}Firewall State:${NC} All vsafegate iptables rules & ipsets removed"
+    echo -e "${GREEN}${BOLD}========================================================================${NC}\n"
+    exit 0
+}
+
+if [ "$ACTION" = "uninstall" ]; then
+    do_uninstall
+fi
+
+echo -e "${BLUE}[1/8] Architecture:${NC} ${BOLD}${TARGET_ARCH}${NC}"
 echo -e "${BLUE}[2/8] System Detected:${NC} ${BOLD}${OS}${NC} (${INIT_SYSTEM})"
 
 # 4. Install OS Prerequisites Automatically
@@ -377,12 +494,25 @@ elif [ -d /etc/cron.daily ]; then
     ln -sf /usr/local/bin/vsafegate-sync-threatintel.sh /etc/cron.daily/vsafegate-threatintel
 fi
 
-# One-command updater helper
+# One-command updater & uninstaller helpers
 cat <<EOF > /usr/local/bin/vsafegate-update
 #!/usr/bin/env bash
 exec curl -fsSL "${RAW_URL}/install.sh" | bash
 EOF
 chmod 755 /usr/local/bin/vsafegate-update
+
+if [ -n "${SRC_DIR:-}" ] && [ -f "${SRC_DIR}/install.sh" ]; then
+    cp -f "${SRC_DIR}/install.sh" /usr/local/bin/vsafegate-uninstall
+elif [ -f "./install.sh" ]; then
+    cp -f "./install.sh" /usr/local/bin/vsafegate-uninstall
+elif [ -f "$0" ] && [ -r "$0" ] && ! basename "$0" | grep -qE '^(bash|sh|dash)$'; then
+    cp -f "$0" /usr/local/bin/vsafegate-uninstall
+else
+    curl -fsSL --max-time 15 "${RAW_URL}/install.sh" -o /usr/local/bin/vsafegate-uninstall || true
+fi
+if [ -f /usr/local/bin/vsafegate-uninstall ]; then
+    chmod 755 /usr/local/bin/vsafegate-uninstall
+fi
 
 # 9. Configure & Start Services (vSafeGate + Caddy)
 echo -e "${BLUE}[7/8] Configuring & starting ${INIT_SYSTEM} services...${NC}"
@@ -490,5 +620,6 @@ echo -e "  📂 ${BOLD}Configuration File:${NC}   ${CONFIG_FILE}"
 echo -e "  🛡️  ${BOLD}Caddy & WAF Rules:${NC}    ${CADDY_DIR}/Caddyfile & ${CADDY_RULES_DIR}/custom-rules.conf"
 echo -e "  📜 ${BOLD}Attack Log Stream:${NC}    ${LOG_DIR}/attacks.jsonl"
 echo -e "  🔄 ${BOLD}One-Line Updater:${NC}     ${YELLOW}sudo vsafegate-update${NC}"
+echo -e "  🧹 ${BOLD}Clean Uninstaller:${NC}    ${YELLOW}sudo vsafegate-uninstall${NC} (or ${YELLOW}--purge${NC})"
 echo -e "  ⚙️  ${BOLD}Service Control:${NC}      ${YELLOW}systemctl status vsafegate caddy${NC} / ${YELLOW}rc-service vsafegate status${NC}"
 echo -e "${GREEN}${BOLD}========================================================================${NC}\n"

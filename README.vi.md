@@ -70,11 +70,16 @@ curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.
    - Nhấn **☀️ / 🌙** để đổi **Light / Dark Theme**.
 4. Vào **Quy Tắc Phòng Thủ (Defense Rules)** → nhấn **`Rule Mẫu Card Mạng`** để tự quét & cho phép các card mạng LAN/VPN (Tailscale, WireGuard, Ethernet...), sau đó cấu hình GeoIP hoặc dịch vụ L4/L7 theo nhu cầu.
 
-### Cập Nhật Phiên Bản Mới Trong 1 Lệnh
+### Cập Nhật & Gỡ Cài Đặt Trong 1 Lệnh
 ```bash
+# Cập nhật phiên bản mới (giữ nguyên cấu hình /etc/vsafegate/config.json)
 sudo vsafegate-update
+
+# Gỡ cài đặt & dọn dẹp sạch rule tường lửa (tự backup config vào /var/backups/vsafegate/)
+sudo vsafegate-uninstall
+# Hoặc chạy gỡ trực tiếp từ GitHub (thêm --purge nếu muốn xóa luôn cả bản backup):
+curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.sh | sudo bash -s -- --uninstall
 ```
-*(Tự động tải/build bản mới nhất và khởi động lại `vsafegate` & `caddy` mà vẫn **giữ nguyên** toàn bộ cấu hình trong `/etc/vsafegate/config.json`)*
 
 ---
 
