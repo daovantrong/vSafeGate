@@ -78,17 +78,17 @@ case "$OS" in
     debian)
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y >/dev/null 2>&1 || true
-        apt-get install -y curl ipset iptables ca-certificates tar >/dev/null 2>&1
+        apt-get install -y curl ipset iptables ca-certificates tar python3 >/dev/null 2>&1
         ;;
     alpine)
         apk update >/dev/null 2>&1 || true
-        apk add --no-cache curl ipset iptables ca-certificates tar bash >/dev/null 2>&1
+        apk add --no-cache curl ipset iptables ca-certificates tar bash python3 >/dev/null 2>&1
         ;;
     rhel)
-        yum install -y curl ipset iptables ca-certificates tar >/dev/null 2>&1 || dnf install -y curl ipset iptables ca-certificates tar >/dev/null 2>&1
+        yum install -y curl ipset iptables ca-certificates tar python3 >/dev/null 2>&1 || dnf install -y curl ipset iptables ca-certificates tar python3 >/dev/null 2>&1
         ;;
     arch)
-        pacman -Sy --noconfirm curl ipset iptables ca-certificates tar >/dev/null 2>&1
+        pacman -Sy --noconfirm curl ipset iptables ca-certificates tar python3 >/dev/null 2>&1
         ;;
 esac
 echo -e "${GREEN}[OK] Prerequisites ready.${NC}"
@@ -262,7 +262,13 @@ HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "127.0.0.1")
 echo -e "\n${GREEN}${BOLD}========================================================================${NC}"
 echo -e "${GREEN}${BOLD}   🎉 vSafeGate Installed & Started Successfully!${NC}"
 echo -e "${GREEN}${BOLD}========================================================================${NC}"
-echo -e "  🌐 ${BOLD}Web Admin Dashboard:${NC}  ${CYAN}https://${HOST_IP}:4438/${NC}"
+if command -v caddy >/dev/null 2>&1; then
+    echo -e "  🌐 ${BOLD}Web Admin Dashboard:${NC}  ${CYAN}https://${HOST_IP}:4438/${NC}"
+else
+    echo -e "  🌐 ${BOLD}Daemon Listening:${NC}     ${CYAN}http://127.0.0.1:9444/${NC} (local bind)"
+    echo -e "  🔌 ${BOLD}SSH Tunnel Access:${NC}    ${YELLOW}ssh -L 9444:127.0.0.1:9444 <user>@${HOST_IP}${NC}"
+    echo -e "  ⚠️  ${YELLOW}[NOTE] 'caddy' not found: install Caddy with Coraza WAF for L7 WAF & HTTPS :4438.${NC}"
+fi
 echo -e "  🔐 ${BOLD}Authentication:${NC}       Use your Linux PAM server credentials (sudo user)"
 echo -e "  📂 ${BOLD}Configuration File:${NC}   $CONFIG_FILE"
 echo -e "  📜 ${BOLD}Attack Log Stream:${NC}    $LOG_DIR/attacks.jsonl"
