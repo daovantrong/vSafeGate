@@ -1,6 +1,6 @@
 # 🛡️ vSafeGate — Hệ Thống Tường Lửa Web (WAF) & L4 Stream Gateway
 
-> **Ngôn ngữ / Language:** 🇻🇳 **Tiếng Việt** ([README.md](README.vi.md)) | 🇬🇧 [English](README.md)
+> **Ngôn ngữ / Language:** 🇻🇳 **Tiếng Việt** ([README.vi.md](README.vi.md)) | 🇬🇧 [English](README.md)
 
 > **Open-Source Web Application Firewall (WAF) & L4 Stream Gateway**  
 > Giải pháp tường lửa đa máy chủ viết bằng Go: Bảo vệ 2 tầng (Linux Kernel `iptables`/`ipset` + Coraza WAF / L4 Zero-Copy `splice(2)`), giao diện Web **Dark/Light Theme**, **Đa ngôn ngữ (Tiếng Việt / English)** và nhúng hoàn toàn tài nguyên trong **1 file binary duy nhất** (0 CDN, 0 Docker bắt buộc).
@@ -31,117 +31,79 @@
 
 ---
 
-## 📦 HƯỚNG DẪN CÀI ĐẶT & CHẠY SCRIPT (TỪNG BƯỚC)
+## 📦 CÀI ĐẶT TỰ ĐỘNG HOÀN TOÀN (1 LỆNH DUY NHẤT)
 
 ### Yêu Cầu Hệ Thống
 - **Hệ điều hành Linux:** Debian, Ubuntu, Proxmox VE (`systemd`), Alpine Linux (`OpenRC`), RHEL/CentOS/Rocky/Alma (`systemd`), hoặc Arch Linux.
 - **Kiến trúc CPU:** `x86_64` (`amd64`) hoặc `aarch64` (`arm64`).
 - **Quyền thực thi:** `root` hoặc `sudo`.
-- **Gói phụ thuộc (script tự cài):** `curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3` (+ `bash` trên Alpine).
-- **Caddy + Coraza WAF (Tùy chọn cho L7 WAF & HTTPS `:4438`):** Daemon quản trị `vsafegate` lắng nghe nội bộ tại `127.0.0.1:9444`. Để bật Reverse Proxy HTTPS `:4438` và L7 WAF `:80`/`:443`, máy chủ cần có Caddy biên dịch kèm plugin `coraza-caddy/v2` (xem **Bước 4** bên dưới).
 
 ---
 
-### Cách 1: Cài Đặt Nhanh Bằng 1 Lệnh Từ GitHub (Khuyến Nghị)
+### Cài Đặt Toàn Bộ Hệ Thống Trong 1 Lệnh
 
-> Áp dụng khi kho GitHub đã có bản phát hành (Release) hoặc bạn muốn tự động cài đặt toàn bộ môi trường & dịch vụ hệ thống.
+Chỉ cần SSH vào máy chủ và chạy duy nhất lệnh sau — **script sẽ tự động tải, biên dịch (nếu cần), cài đặt và khởi chạy toàn bộ từ A-Z mà không bắt bạn cài thủ công Go hay Caddy**:
 
-**Bước 1:** Đăng nhập SSH vào máy chủ Linux với quyền `root` hoặc tài khoản có `sudo`.
-
-**Bước 2:** Chạy lệnh cài đặt tự động:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.sh | sudo bash
 ```
 
-**Script `install.sh` sẽ tự động thực hiện:**
-1. Kiểm tra quyền `root`, nhận diện kiến trúc (`amd64` / `arm64`), hệ điều hành (`debian` / `alpine` / `rhel` / `arch`) và trình quản lý dịch vụ (`systemd` / `openrc`).
-2. Cài đặt các gói hệ thống cần thiết (`curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3`).
-3. **Chống tự khóa SSH:** Tự đọc IP từ `$SSH_CLIENT` / `$SSH_CONNECTION` và nạp trước vào danh sách `whitelist_ips`.
-4. Tải binary mới nhất từ [GitHub Releases](https://github.com/daovantrong/vSafeGate/releases) vào `/usr/local/bin/vsafegate` (nếu chưa có Release trên GitHub, script sẽ tự tìm binary cục bộ hoặc biên dịch từ `./mgt` nếu máy có Go).
-5. Khởi tạo `/etc/vsafegate/config.json` với trạng thái an toàn (`"geoip_mode": "disabled"`).
-6. Tạo và khởi động service hệ thống (`vsafegate.service` cho `systemd` hoặc `/etc/init.d/vsafegate` cho `OpenRC`) cùng symlink `/usr/bin/vsafegate`.
+**Script `install.sh` tự động làm hết 100%:**
+1. **Nhận diện hệ thống:** Tự phát hiện kiến trúc (`amd64` / `arm64`), distro Linux (`debian`, `alpine`, `rhel`, `arch`) và init system (`systemd` hoặc `OpenRC`).
+2. **Cài đặt gói hệ thống:** Tự cài `iptables`, `ipset`, `curl`, `git`, `python3`, `ca-certificates`, `tar`, `gzip`.
+3. **Chống tự khóa SSH (Anti-Lockout):** Tự đọc IP phiên SSH hiện tại (`$SSH_CLIENT` / `$SSH_CONNECTION`) và nạp sẵn vào `whitelist_ips`.
+4. **Cài đặt Core `vsafegate`:** Tự tải binary từ [GitHub Releases](https://github.com/daovantrong/vSafeGate/releases); nếu chưa có bản phát hành, **tự động tải Go tạm thời, clone mã nguồn, biên dịch `/usr/local/bin/vsafegate` và xóa sạch file tạm**.
+5. **Cài đặt `Caddy + Coraza WAF`:** Tự tải Caddy tích hợp sẵn `coraza-caddy/v2` (hoặc **tự động biên dịch qua `xcaddy`**) vào `/usr/bin/caddy`, chạy ngay L7 WAF (`:80`/`:443`) và HTTPS Dashboard (`:4438`).
+6. **Cấu hình an toàn đa server:** Tạo `/etc/vsafegate/config.json` với `"geoip_mode": "disabled"` (không tự khóa VPS ở nước ngoài).
+7. **Kích hoạt Threat Intelligence tự động:** Cài `/usr/local/bin/vsafegate-sync-threatintel.sh`, lập lịch cron hằng ngày và đồng bộ ngay bảng chặn `vsafegate-threatintel`.
+8. **Đăng ký & Khởi chạy dịch vụ:** Tạo và bật đồng thời service `vsafegate` + `caddy`, kèm lệnh cập nhật nhanh `sudo vsafegate-update`.
 
 ---
 
-### Cách 2: Clone GitHub, Tự Biên Dịch & Chạy Script Cục Bộ
+### Truy Cập & Cấu Hình Sau Khi Cài Đặt
 
-Phù hợp khi bạn muốn tự build trực tiếp từ mã nguồn Go (yêu cầu **Go 1.22+**) hoặc khi repo chưa tạo GitHub Release:
+1. Mở trình duyệt truy cập URL hiển thị ở cuối quá trình cài đặt:
+   - **`https://<SERVER_IP>:4438/`** *(chấp nhận chứng chỉ tự ký nội bộ ở lần đầu)*
+2. Đăng nhập bằng **tài khoản Linux (`sudo` user)** của máy chủ.
+3. Trên góc phải thanh Header:
+   - Nhấn **`🇻🇳 VI` / `🇬🇧 EN`** để chuyển ngôn ngữ.
+   - Nhấn **☀️ / 🌙** để đổi **Light / Dark Theme**.
+4. Vào **Quy Tắc Phòng Thủ (Defense Rules)** → nhấn **`Rule Mẫu Card Mạng`** để tự quét & cho phép các card mạng LAN/VPN (Tailscale, WireGuard, Ethernet...), sau đó cấu hình GeoIP hoặc dịch vụ L4/L7 theo nhu cầu.
 
+### Cập Nhật Phiên Bản Mới Trong 1 Lệnh
 ```bash
-# Bước 1: Tải mã nguồn từ GitHub
+sudo vsafegate-update
+```
+*(Tự động tải/build bản mới nhất và khởi động lại `vsafegate` & `caddy` mà vẫn **giữ nguyên** toàn bộ cấu hình trong `/etc/vsafegate/config.json`)*
+
+---
+
+### Tùy Chọn Nâng Cao (Developer / Docker)
+
+<details>
+<summary>Mở rộng để xem cách chạy từ repo đã clone, chế độ Dev hoặc Docker Compose</summary>
+
+#### A. Chạy script từ thư mục repo đã clone sẵn
+```bash
 git clone https://github.com/daovantrong/vSafeGate.git
 cd vSafeGate
-
-# Bước 2: Chạy Unit Test & Biên dịch binary cho máy chủ Linux hiện tại
-cd mgt
-go test -v ./...
-CGO_ENABLED=0 go build -ldflags="-s -w" -o ../vsafegate-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') .
-cd ..
-
-# Bước 3: Cấp quyền thực thi và chạy script cài đặt
-chmod +x install.sh
 sudo bash install.sh
 ```
 
-> **Cross-compile từ Windows / macOS sang Linux:**
-> ```powershell
-> cd mgt
-> $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"
-> go build -ldflags="-s -w" -o ../vsafegate-linux-amd64 .
-> ```
-> Sau đó chép file `vsafegate-linux-amd64` và `install.sh` lên máy chủ Linux rồi chạy `sudo bash install.sh`.
-
----
-
-### Bước 3: Cài Đặt Caddy + Coraza WAF (Cho L7 WAF & HTTPS `:4438`)
-
-`vsafegate` tự động sinh cấu hình `/etc/caddy/Caddyfile` và `/etc/caddy/rules/custom-rules.conf`, sau đó gọi reload `caddy`. Bạn có 2 lựa chọn triển khai Caddy:
-
-- **Lựa chọn A — Build native binary bằng `xcaddy` (Khuyến nghị trên host trực tiếp):**
-  ```bash
-  go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-  xcaddy build --with github.com/corazawaf/coraza-caddy/v2 --output /usr/bin/caddy
-  chmod +x /usr/bin/caddy
-  ```
-- **Lựa chọn B — Chạy Caddy + Coraza qua Docker Compose có sẵn trong repo:**
-  ```bash
-  docker compose up -d --build
-  ```
-
-> **Lưu ý nếu chưa cài Caddy:** Daemon `vsafegate` vẫn chạy độc lập trên `127.0.0.1:9444` (để bảo vệ L4 Gateway, iptables/ipset, SSH Guard, Canary). Bạn có thể mở giao diện Web an toàn qua SSH Tunnel từ máy cá nhân:
-> ```bash
-> ssh -L 9444:127.0.0.1:9444 <user>@<SERVER_IP>
-> # Sau đó mở trình duyệt tại: http://127.0.0.1:9444/
-> ```
-
----
-
-### Bước 4: Truy Cập & Cấu Hình Lần Đầu Trên Web Dashboard
-
-1. Mở trình duyệt truy cập:
-   - Qua Caddy HTTPS: `https://<SERVER_IP>:4438/` (chấp nhận chứng chỉ nội bộ `tls internal` lần đầu)
-   - Hoặc qua SSH Tunnel: `http://127.0.0.1:9444/`
-2. Đăng nhập bằng **tài khoản Linux (PAM / `/etc/shadow`)** của máy chủ (hoặc cấu hình `admin_user` / `admin_password` trong `/etc/vsafegate/config.json`).
-3. Trên thanh Header góc trên bên phải:
-   - Nhấn nút **`🇻🇳 VI` / `🇬🇧 EN`** để chuyển ngôn ngữ.
-   - Nhấn nút **☀️ / 🌙** để chuyển **Light / Dark Theme**.
-4. Vào tab **Quy Tắc Phòng Thủ (Defense Rules)** hoặc **Giám Sát IP (IP Management)**:
-   - Nhấn **`Rule Mẫu Card Mạng`** (Auto-Detect) để nạp nhanh dải mạng LAN/VPN thực tế của máy chủ.
-   - Nếu cần giới hạn quốc gia, chuyển chế độ GeoIP sang **`Whitelist`** hoặc **`Blacklist`** và chọn quốc gia tương ứng.
-5. Vào tab **Website & Proxy** / **Dịch Vụ L4** để thêm các dịch vụ cần bảo vệ.
-
----
-
-### Cách 3: Chạy Chế Độ Phát Triển (Development Mode)
-
-Dùng để thử nghiệm giao diện và API ngay trên máy cá nhân (Windows/Linux/macOS):
-
+#### B. Chạy thử nghiệm giao diện cục bộ (Development Mode)
 ```bash
 cd mgt
 ENV=dev go run .
 ```
-- Đọc/ghi dữ liệu cục bộ tại `./config.json`, `./Caddyfile`, `./rules/custom-rules.conf`, `./attacks.jsonl`.
-- Cho phép đăng nhập nhanh bằng tài khoản dev `admin` / `vsafegate123` (chỉ hoạt động khi `ENV=dev`).
+- Sử dụng dữ liệu cục bộ `./config.json`, `./Caddyfile`, `./rules/custom-rules.conf`, `./attacks.jsonl`.
+- Tài khoản dev: `admin` / `vsafegate123` (chỉ hoạt động khi `ENV=dev`).
+
+#### C. Chạy riêng Caddy + Coraza bằng Docker Compose
+```bash
+docker compose up -d --build
+```
+
+</details>
 
 ---
 
@@ -194,9 +156,9 @@ flowchart TD
 
 Kho mã nguồn đã tích hợp workflow [`.github/workflows/release.yml`](.github/workflows/release.yml). Khi bạn đẩy một Git tag mới (ví dụ `v2.1.0`), GitHub Actions sẽ tự động:
 1. Chạy toàn bộ unit test (`cd mgt && go test -v ./...`).
-2. Biên dịch chéo binary không phụ thuộc (`CGO_ENABLED=0`) cho **`linux/amd64`** và **`linux/arm64`**.
+2. Biên dịch chéo binary không phụ thuộc (`CGO_ENABLED=0`) cho **`linux/amd64`** và **`linux/arm64`**, gồm cả **`vsafegate`** và **`caddy-coraza`** (`coraza-caddy/v2`).
 3. Tạo file kiểm tra toàn vẹn `sha256sums.txt`.
-4. Tạo **GitHub Release** mới đính kèm `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `sha256sums.txt` và `install.sh` — giúp người dùng chạy được ngay lệnh `curl ... install.sh | sudo bash`.
+4. Tạo **GitHub Release** mới đính kèm `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `caddy-coraza-linux-amd64`, `caddy-coraza-linux-arm64`, `sha256sums.txt` và `install.sh` — giúp `install.sh` tải và cài xong chỉ trong vài giây.
 
 ```bash
 git tag v2.1.0
@@ -210,10 +172,10 @@ git push origin v2.1.0
 ```text
 vSafeGate/
 ├── .github/workflows/
-│   └── release.yml             # CI/CD tự động test, build amd64/arm64 và tạo GitHub Release
-├── install.sh                  # Script cài đặt vạn năng 1 dòng (Systemd & OpenRC)
-├── README.md                   # Tài liệu hướng dẫn Tiếng Việt
-├── README.en.md                # Tài liệu hướng dẫn Tiếng Anh
+│   └── release.yml             # CI/CD tự động test, build amd64/arm64 (vSafeGate + Caddy Coraza) & Release
+├── install.sh                  # Script cài đặt tự động hoàn toàn 1 dòng (Systemd & OpenRC)
+├── README.md                   # Tài liệu hướng dẫn Tiếng Anh (Mặc định)
+├── README.vi.md                # Tài liệu hướng dẫn Tiếng Việt
 ├── SERVERS.md                  # Tài liệu mẫu danh mục máy chủ & ánh xạ cổng
 ├── Dockerfile                  # Build Caddy 2.8 kèm Coraza WAF plugin
 ├── docker-compose.yml          # Triển khai Caddy + Coraza container
@@ -247,14 +209,14 @@ vSafeGate/
 ### 1. Quản Lý Dịch Vụ
 - **Debian / Ubuntu / Proxmox / RHEL / Arch (`systemd`):**
   ```bash
-  sudo systemctl status vsafegate
-  sudo systemctl restart vsafegate
+  sudo systemctl status vsafegate caddy
+  sudo systemctl restart vsafegate caddy
   sudo journalctl -u vsafegate -f
   ```
 - **Alpine Linux (`OpenRC`):**
   ```bash
-  sudo rc-service vsafegate status
-  sudo rc-service vsafegate restart
+  sudo rc-service vsafegate status && sudo rc-service caddy status
+  sudo rc-service vsafegate restart && sudo rc-service caddy restart
   ```
 
 ### 2. Kiểm Tra Tường Lửa Kernel (`ipset` & `iptables`)

@@ -1,6 +1,6 @@
 # 🛡️ vSafeGate — Open-Source Web Application Firewall (WAF) & L4 Stream Gateway
 
-> **Language / Ngôn ngữ:** 🇬🇧 **English** ([README.en.md](README.md)) | 🇻🇳 [Tiếng Việt](README.vi.md)
+> **Language / Ngôn ngữ:** 🇬🇧 **English** ([README.md](README.md)) | 🇻🇳 [Tiếng Việt](README.vi.md)
 
 > **Multi-Server Linux Security Gateway & WAF**  
 > Lightweight single-binary Go firewall solution combining **2-Tier Defense** (Linux Kernel `iptables`/`ipset` + Coraza WAF / Zero-Copy `splice(2)` L4 Proxy), an enterprise **Dark/Light Theme** dashboard, **Bilingual UI (English / Vietnamese)**, and **100% embedded local assets** (zero CDN dependencies).
@@ -31,115 +31,79 @@
 
 ---
 
-## 📦 INSTALLATION & SCRIPT USAGE (STEP-BY-STEP)
+## 📦 ONE-COMMAND AUTOMATED INSTALLATION
 
 ### System Requirements
 - **Linux OS:** Debian, Ubuntu, Proxmox VE (`systemd`), Alpine Linux (`OpenRC`), RHEL/CentOS/Rocky/AlmaLinux (`systemd`), or Arch Linux.
 - **CPU Architecture:** `x86_64` (`amd64`) or `aarch64` (`arm64`).
 - **Privileges:** `root` or `sudo`.
-- **System Dependencies (auto-installed by `install.sh`):** `curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3` (+ `bash` on Alpine).
-- **Caddy + Coraza WAF (Optional for L7 WAF & HTTPS `:4438`):** The `vsafegate` management daemon binds locally on `127.0.0.1:9444`. To expose HTTPS `:4438` and L7 WAF sites on `:80`/`:443`, install Caddy built with `coraza-caddy/v2` (see **Step 3** below).
 
 ---
 
-### Method 1: Quick One-Line Install Script from GitHub (Recommended)
+### Full Stack Automated Setup (Zero Manual Steps)
 
-**Step 1:** SSH into your Linux server as `root` or a `sudo`-capable user.
+SSH into your server and run a single command — **`install.sh` handles everything automatically without requiring you to manually download Go, Caddy, or configure services**:
 
-**Step 2:** Run the universal installer script:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/daovantrong/vSafeGate/main/install.sh | sudo bash
 ```
 
-**What `install.sh` performs automatically:**
-1. Validates root privileges and detects CPU architecture (`amd64` / `arm64`), OS distribution (`debian` / `alpine` / `rhel` / `arch`), and init system (`systemd` / `openrc`).
-2. Installs required packages (`curl`, `ipset`, `iptables`, `ca-certificates`, `tar`, `python3`).
-3. **Anti-Lockout Protection:** Extracts your current SSH client IP (`$SSH_CLIENT` / `$SSH_CONNECTION`) and adds it to `whitelist_ips`.
-4. Downloads the latest release binary from [GitHub Releases](https://github.com/daovantrong/vSafeGate/releases) into `/usr/local/bin/vsafegate` (or falls back to a local binary / source compilation via `go` if no release tag exists yet).
-5. Generates a safe default `/etc/vsafegate/config.json` with `"geoip_mode": "disabled"`.
-6. Registers and starts the system service (`vsafegate.service` under `systemd`, or `/etc/init.d/vsafegate` under `OpenRC`) and links `/usr/bin/vsafegate`.
+**What `install.sh` performs automatically from start to finish:**
+1. **System Detection:** Detects CPU architecture (`amd64` / `arm64`), Linux distribution (`debian`, `alpine`, `rhel`, `arch`), and init system (`systemd` / `OpenRC`).
+2. **System Packages:** Installs `iptables`, `ipset`, `curl`, `git`, `python3`, `ca-certificates`, `tar`, and `gzip`.
+3. **SSH Anti-Lockout Fail-Safe:** Reads your active SSH session IP (`$SSH_CLIENT` / `$SSH_CONNECTION`) and automatically adds it to `whitelist_ips`.
+4. **Installs `vsafegate` Core Daemon:** Downloads the prebuilt binary from [GitHub Releases](https://github.com/daovantrong/vSafeGate/releases); if no release exists yet, **automatically installs a temporary Go toolchain, clones the repo, builds `/usr/local/bin/vsafegate`, and cleans up temporary build files**.
+5. **Installs `Caddy + Coraza WAF`:** Downloads the prebuilt Caddy binary compiled with `coraza-caddy/v2` (or **automatically builds it via `xcaddy`**) to `/usr/bin/caddy`, enabling L7 WAF (`:80`/`:443`) and HTTPS Admin Proxy (`:4438`) immediately.
+6. **Multi-Server Safe Configuration:** Generates `/etc/vsafegate/config.json` with `"geoip_mode": "disabled"` so international administrators are never locked out.
+7. **Automated Threat Intelligence Sync:** Installs `/usr/local/bin/vsafegate-sync-threatintel.sh`, adds a daily cron job, and runs the initial `vsafegate-threatintel` sync.
+8. **Registers & Starts Services:** Creates and enables both `vsafegate` and `caddy` services (`systemd` / `OpenRC`), plus installs `sudo vsafegate-update` for one-command upgrades.
 
 ---
 
-### Method 2: Clone GitHub Repository, Build & Run Script Locally
+### First-Time Web Dashboard Access
 
-Recommended if you want to build from source (**Go 1.22+** required) or customize the codebase before installing:
+1. Open the URL printed at the end of the installer:
+   - **`https://<SERVER_IP>:4438/`** *(accept the internal self-signed TLS certificate on first visit)*
+2. Sign in with your server's **Linux PAM account** (`sudo` user).
+3. In the top-right header bar:
+   - Click **`🇻🇳 VI` / `🇬🇧 EN`** to switch between English and Vietnamese.
+   - Click **☀️ / 🌙** to toggle **Light / Dark Theme**.
+4. Go to **Defense Rules** → click **Interface Presets (`Rule Mẫu Card Mạng`)** to auto-detect and allow your host's LAN/VPN interfaces, and configure GeoIP or L4/L7 services as needed.
 
+### One-Command Upgrade
 ```bash
-# Step 1: Clone the repository
+sudo vsafegate-update
+```
+*(Automatically downloads/builds the latest version and restarts `vsafegate` & `caddy` while **preserving** `/etc/vsafegate/config.json`)*
+
+---
+
+### Advanced / Developer Options
+
+<details>
+<summary>Expand for local repo install, Development Mode (ENV=dev), or Docker Compose</summary>
+
+#### A. Run installer from a cloned repository
+```bash
 git clone https://github.com/daovantrong/vSafeGate.git
 cd vSafeGate
-
-# Step 2: Run unit tests and compile the Go binary for your server architecture
-cd mgt
-go test -v ./...
-CGO_ENABLED=0 go build -ldflags="-s -w" -o ../vsafegate-linux-$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') .
-cd ..
-
-# Step 3: Make the installer executable and run it
-chmod +x install.sh
 sudo bash install.sh
 ```
 
-> **Cross-compiling from Windows / macOS to Linux:**
-> ```powershell
-> cd mgt
-> $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"
-> go build -ldflags="-s -w" -o ../vsafegate-linux-amd64 .
-> ```
-> Then copy `vsafegate-linux-amd64` and `install.sh` to your Linux host and execute `sudo bash install.sh`.
-
----
-
-### Step 3: Installing Caddy + Coraza WAF (For L7 WAF & HTTPS `:4438`)
-
-`vsafegate` manages `/etc/caddy/Caddyfile` and `/etc/caddy/rules/custom-rules.conf` automatically and triggers Caddy reloads on rule changes. Choose either option:
-
-- **Option A — Native Caddy binary compiled with `xcaddy` (recommended for bare-metal / VM hosts):**
-  ```bash
-  go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
-  xcaddy build --with github.com/corazawaf/coraza-caddy/v2 --output /usr/bin/caddy
-  chmod +x /usr/bin/caddy
-  ```
-- **Option B — Docker Compose stack included in the repository:**
-  ```bash
-  docker compose up -d --build
-  ```
-
-> **If Caddy is not installed yet:** `vsafegate` still runs standalone on `127.0.0.1:9444` (managing iptables/ipset, L4 Proxy, SSH Guard, and Canary). You can securely open the Web Dashboard via an SSH tunnel:
-> ```bash
-> ssh -L 9444:127.0.0.1:9444 <user>@<SERVER_IP>
-> # Open in your local browser: http://127.0.0.1:9444/
-> ```
-
----
-
-### Step 4: Accessing & Configuring the Web Dashboard
-
-1. Open your browser at:
-   - Via Caddy HTTPS proxy: `https://<SERVER_IP>:4438/` (accept the internal self-signed TLS cert on initial access)
-   - Or via SSH tunnel: `http://127.0.0.1:9444/`
-2. Sign in using your **Linux system account** (PAM / `/etc/shadow`) or configure `admin_user` / `admin_password` in `/etc/vsafegate/config.json`.
-3. Use the top-right header toggles:
-   - Click **`🇻🇳 VI` / `🇬🇧 EN`** to switch between English and Vietnamese.
-   - Click **☀️ / 🌙** to toggle **Light / Dark Theme**.
-4. Navigate to **Defense Rules** or **IP Management**:
-   - Click **Interface Presets (`Rule Mẫu Card Mạng`)** to auto-detect and allow your server's LAN/VPN interfaces.
-   - Optionally enable GeoIP **`Whitelist`** or **`Blacklist`** mode for country-level kernel filtering.
-5. Add protected domains in **Sites & Proxy** or TCP forwarding ports in **L4 Services**.
-
----
-
-### Method 3: Running in Development Mode (`ENV=dev`)
-
-To preview UI changes and test APIs locally on Windows, macOS, or Linux:
-
+#### B. Run locally in Development Mode
 ```bash
 cd mgt
 ENV=dev go run .
 ```
 - Uses local files (`./config.json`, `./Caddyfile`, `./rules/custom-rules.conf`, `./attacks.jsonl`).
-- Enables the development login fallback `admin` / `vsafegate123` (only active when `ENV=dev`).
+- Enables the development login fallback `admin` / `vsafegate123` (active only when `ENV=dev`).
+
+#### C. Run Caddy + Coraza standalone via Docker Compose
+```bash
+docker compose up -d --build
+```
+
+</details>
 
 ---
 
@@ -192,9 +156,9 @@ flowchart TD
 
 This repository includes [`.github/workflows/release.yml`](.github/workflows/release.yml). Pushing a version tag (e.g., `v2.1.0`) automatically:
 1. Executes all Go unit tests (`cd mgt && go test -v ./...`).
-2. Cross-compiles static binaries (`CGO_ENABLED=0`) for **`linux/amd64`** and **`linux/arm64`**.
+2. Cross-compiles static binaries (`CGO_ENABLED=0`) for **`linux/amd64`** and **`linux/arm64`**, for both **`vsafegate`** and **`caddy-coraza`** (`coraza-caddy/v2`).
 3. Generates `sha256sums.txt`.
-4. Publishes a **GitHub Release** with `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `sha256sums.txt`, and `install.sh`, enabling immediate one-line installs via `install.sh`.
+4. Publishes a **GitHub Release** with `vsafegate-linux-amd64`, `vsafegate-linux-arm64`, `caddy-coraza-linux-amd64`, `caddy-coraza-linux-arm64`, `sha256sums.txt`, and `install.sh` — enabling fast zero-compile installs via `install.sh`.
 
 ```bash
 git tag v2.1.0
@@ -208,10 +172,10 @@ git push origin v2.1.0
 ```text
 vSafeGate/
 ├── .github/workflows/
-│   └── release.yml             # CI/CD workflow for multi-arch tests, builds, and GitHub Releases
-├── install.sh                  # Universal one-line installer (systemd & OpenRC)
-├── README.md                   # Vietnamese documentation
-├── README.en.md                # English documentation
+│   └── release.yml             # CI/CD workflow for multi-arch tests, builds (vSafeGate + Caddy Coraza), and Releases
+├── install.sh                  # All-in-one automated installer (systemd & OpenRC, zero manual setup)
+├── README.md                   # English documentation (Primary)
+├── README.vi.md                # Vietnamese documentation
 ├── SERVERS.md                  # Server inventory & port mapping template
 ├── Dockerfile                  # Builds Caddy 2.8 with Coraza WAF plugin
 ├── docker-compose.yml          # Container deployment for Caddy + Coraza
@@ -245,14 +209,14 @@ vSafeGate/
 ### 1. Service Management
 - **Debian / Ubuntu / Proxmox / RHEL / Arch (`systemd`):**
   ```bash
-  sudo systemctl status vsafegate
-  sudo systemctl restart vsafegate
+  sudo systemctl status vsafegate caddy
+  sudo systemctl restart vsafegate caddy
   sudo journalctl -u vsafegate -f
   ```
 - **Alpine Linux (`OpenRC`):**
   ```bash
-  sudo rc-service vsafegate status
-  sudo rc-service vsafegate restart
+  sudo rc-service vsafegate status && sudo rc-service caddy status
+  sudo rc-service vsafegate restart && sudo rc-service caddy restart
   ```
 
 ### 2. Inspect Kernel Firewall (`ipset` & `iptables`)

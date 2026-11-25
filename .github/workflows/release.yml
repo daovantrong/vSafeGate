@@ -29,26 +29,38 @@ jobs:
           cd mgt
           go test -v ./...
 
-      - name: Compile Multi-Architecture Binaries
+      - name: Compile vSafeGate Binaries (amd64 & arm64)
         run: |
           mkdir -p dist
           cd mgt
-          
-          # Linux amd64 (x86_64)
-          echo "Building Linux amd64..."
+
+          echo "Building vSafeGate Linux amd64..."
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o ../dist/vsafegate-linux-amd64 .
-          
-          # Linux arm64 (aarch64)
-          echo "Building Linux arm64..."
+
+          echo "Building vSafeGate Linux arm64..."
           CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o ../dist/vsafegate-linux-arm64 .
-          
-          cd ..
-          chmod +x dist/vsafegate-*
+
+      - name: Build Caddy + Coraza WAF Binaries (amd64 & arm64)
+        run: |
+          go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+          XCADDY_BIN="$(go env GOPATH)/bin/xcaddy"
+
+          echo "Building Caddy + Coraza WAF Linux amd64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 "$XCADDY_BIN" build \
+            --with github.com/corazawaf/coraza-caddy/v2 \
+            --output dist/caddy-coraza-linux-amd64
+
+          echo "Building Caddy + Coraza WAF Linux arm64..."
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 "$XCADDY_BIN" build \
+            --with github.com/corazawaf/coraza-caddy/v2 \
+            --output dist/caddy-coraza-linux-arm64
+
+          chmod +x dist/*
 
       - name: Generate Checksums
         run: |
           cd dist
-          sha256sum vsafegate-* > sha256sums.txt
+          sha256sum vsafegate-* caddy-coraza-* > sha256sums.txt
           cat sha256sums.txt
 
       - name: Create GitHub Release
@@ -58,6 +70,8 @@ jobs:
           files: |
             dist/vsafegate-linux-amd64
             dist/vsafegate-linux-arm64
+            dist/caddy-coraza-linux-amd64
+            dist/caddy-coraza-linux-arm64
             dist/sha256sums.txt
             install.sh
           generate_release_notes: true
