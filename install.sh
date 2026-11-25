@@ -125,12 +125,14 @@ case "$OS" in
 esac
 echo -e "${GREEN}[OK] System dependencies installed.${NC}"
 
-# 5. Anti-Lockout SSH Detection
+# 5. Anti-Lockout SSH Detection (works even when sudo strips SSH_CLIENT)
 ADMIN_IP=""
 if [ -n "$SSH_CLIENT" ]; then
     ADMIN_IP=$(echo "$SSH_CLIENT" | awk '{print $1}')
 elif [ -n "$SSH_CONNECTION" ]; then
     ADMIN_IP=$(echo "$SSH_CONNECTION" | awk '{print $1}')
+elif command -v who >/dev/null 2>&1; then
+    ADMIN_IP=$(who -m 2>/dev/null | sed -n 's/.*(\([0-9a-fA-F.:]*\)).*/\1/p' | head -n1 || true)
 fi
 
 if [ -n "$ADMIN_IP" ]; then
@@ -234,7 +236,7 @@ echo -e "${GREEN}[OK] vSafeGate binary installed at ${INSTALL_BIN}.${NC}"
 # 7. Install Caddy + Coraza WAF (GitHub Releases -> Local -> Vendored In-Repo Build)
 echo -e "${BLUE}[5/8] Installing vendored Caddy + Coraza WAF (L7 Core & HTTPS Proxy)...${NC}"
 CADDY_OK=false
-if command -v caddy >/dev/null 2>&1 && caddy list-modules 2>/dev/null | grep -q "coraza_waf"; then
+if command -v caddy >/dev/null 2>&1 && caddy list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza)"; then
     echo -e "${GREEN}[OK] Existing Caddy with Coraza WAF module detected.${NC}"
     CADDY_OK=true
 fi
@@ -273,54 +275,60 @@ echo -e "${GREEN}[OK] Caddy + Coraza WAF installed at ${CADDY_BIN}.${NC}"
 echo -e "${BLUE}[6/8] Initializing safe default configuration & Threat Intel sync...${NC}"
 if [ ! -f "$CONFIG_FILE" ]; then
     NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    LOCAL_IPS_JSON=""
-    if [ -n "$ADMIN_IP" ]; then
-        LOCAL_IPS_JSON="{\"ip\": \"${ADMIN_IP}\", \"note\": \"Admin Initial SSH IP (Auto-Protected)\", \"created_at\": \"${NOW}\"},"
-    fi
+    ADMIN_IP_ENV="$ADMIN_IP" NOW_ENV="$NOW" CONFIG_PATH_ENV="$CONFIG_FILE" python3 - <<'PYEOF'
+import json, os
 
-    cat <<EOF > "$CONFIG_FILE"
-{
-  "sites": [],
-  "l4_services": [],
-  "rules": [
-    {
-      "id": "rule-1001",
-      "rule_id": 1001,
-      "name": "Block sensitive files (.env, .git, .aws)",
-      "target": "URI",
-      "operator": "rx",
-      "pattern": "(^|/)(\\.env|\\.git|\\.aws|config\\.json)",
-      "action": "deny",
-      "description": "Prevent exposure of source code and environment credentials",
-      "enabled": true
-    }
-  ],
-  "banned_ips": [],
-  "whitelist_ips": [
-    $LOCAL_IPS_JSON
-    {"ip": "127.0.0.1", "note": "Localhost loopback", "created_at": "${NOW}"},
-    {"ip": "10.0.0.0/8", "note": "Private LAN (Class A)", "created_at": "${NOW}"},
-    {"ip": "172.16.0.0/12", "note": "Private Network (Class B)", "created_at": "${NOW}"},
-    {"ip": "192.168.0.0/16", "note": "Private LAN / Gateway (Class C)", "created_at": "${NOW}"}
-  ],
-  "default_ban_ttl_hours": 24,
-  "defense_policy": {
+now = os.environ["NOW_ENV"]
+admin_ip = os.environ.get("ADMIN_IP_ENV", "").strip()
+whitelist = []
+if admin_ip:
+    whitelist.append({"ip": admin_ip, "note": "Admin Initial SSH IP (Auto-Protected)", "created_at": now})
+whitelist.extend([
+    {"ip": "127.0.0.1", "note": "Localhost loopback", "created_at": now},
+    {"ip": "10.0.0.0/8", "note": "Private LAN (Class A)", "created_at": now},
+    {"ip": "172.16.0.0/12", "note": "Private Network (Class B)", "created_at": now},
+    {"ip": "192.168.0.0/16", "note": "Private LAN / Gateway (Class C)", "created_at": now},
+])
+
+cfg = {
+    "sites": [],
+    "l4_services": [],
+    "rules": [
+        {
+            "id": "rule-1001",
+            "rule_id": 1001,
+            "name": "Block sensitive files (.env, .git, .aws)",
+            "target": "URI",
+            "operator": "rx",
+            "pattern": r"(^|/)(\.env|\.git|\.aws|config\.json)",
+            "action": "deny",
+            "description": "Prevent exposure of source code and environment credentials",
+            "enabled": True,
+        }
+    ],
+    "banned_ips": [],
+    "whitelist_ips": whitelist,
     "default_ban_ttl_hours": 24,
-    "ssh_guard_enabled": true,
-    "ssh_max_attempts": 3,
-    "canary_enabled": true,
-    "waf_auto_ban_enabled": true,
-    "waf_auto_ban_threshold": 10,
-    "suricata_auto_ban": true
-  },
-  "geoip_mode": "disabled",
-  "allowed_countries": [],
-  "blocked_countries": ["CN", "RU"],
-  "mgmt_domain": "",
-  "mgmt_https_port": 4438,
-  "mgmt_http_port": 808
+    "defense_policy": {
+        "default_ban_ttl_hours": 24,
+        "ssh_guard_enabled": True,
+        "ssh_max_attempts": 3,
+        "canary_enabled": True,
+        "waf_auto_ban_enabled": True,
+        "waf_auto_ban_threshold": 10,
+        "suricata_auto_ban": True,
+    },
+    "geoip_mode": "disabled",
+    "allowed_countries": [],
+    "blocked_countries": ["CN", "RU"],
+    "mgmt_domain": "",
+    "mgmt_https_port": 4438,
+    "mgmt_http_port": 808,
 }
-EOF
+with open(os.environ["CONFIG_PATH_ENV"], "w", encoding="utf-8") as f:
+    json.dump(cfg, f, indent=2, ensure_ascii=False)
+    f.write("\n")
+PYEOF
     echo -e "${GREEN}[OK] Safe configuration initialized at ${CONFIG_FILE}.${NC}"
 else
     echo -e "${YELLOW}[INFO] Existing ${CONFIG_FILE} preserved.${NC}"
