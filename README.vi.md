@@ -1,6 +1,6 @@
 # 🛡️ vSafeGate — Hệ Thống Tường Lửa Web (WAF) & L4 Stream Gateway
 
-> **Ngôn ngữ / Language:** 🇻🇳 **Tiếng Việt** ([README.md](README.md)) | 🇬🇧 [English](README.en.md)
+> **Ngôn ngữ / Language:** 🇻🇳 **Tiếng Việt** ([README.md](README.vi.md)) | 🇬🇧 [English](README.md)
 
 > **Open-Source Web Application Firewall (WAF) & L4 Stream Gateway**  
 > Giải pháp tường lửa đa máy chủ viết bằng Go: Bảo vệ 2 tầng (Linux Kernel `iptables`/`ipset` + Coraza WAF / L4 Zero-Copy `splice(2)`), giao diện Web **Dark/Light Theme**, **Đa ngôn ngữ (Tiếng Việt / English)** và nhúng hoàn toàn tài nguyên trong **1 file binary duy nhất** (0 CDN, 0 Docker bắt buộc).

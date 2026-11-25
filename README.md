@@ -1,6 +1,6 @@
 # 🛡️ vSafeGate — Open-Source Web Application Firewall (WAF) & L4 Stream Gateway
 
-> **Language / Ngôn ngữ:** 🇬🇧 **English** ([README.en.md](README.en.md)) | 🇻🇳 [Tiếng Việt](README.md)
+> **Language / Ngôn ngữ:** 🇬🇧 **English** ([README.en.md](README.md)) | 🇻🇳 [Tiếng Việt](README.vi.md)
 
 > **Multi-Server Linux Security Gateway & WAF**  
 > Lightweight single-binary Go firewall solution combining **2-Tier Defense** (Linux Kernel `iptables`/`ipset` + Coraza WAF / Zero-Copy `splice(2)` L4 Proxy), an enterprise **Dark/Light Theme** dashboard, **Bilingual UI (English / Vietnamese)**, and **100% embedded local assets** (zero CDN dependencies).
