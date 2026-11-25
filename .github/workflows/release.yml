@@ -5,6 +5,16 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (leave empty to use v<VERSION>, e.g. v1.0.1)'
+        required: false
+        default: ''
+      publish_release:
+        description: 'Create/Update GitHub Release automatically'
+        type: boolean
+        required: true
+        default: true
 
 permissions:
   contents: write
@@ -16,13 +26,35 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Go Environment (Pinned from go.mod)
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: 'mgt/go.mod'
           check-latest: true
+          cache: false
+
+      - name: Resolve Version & Release Tag
+        id: meta
+        run: |
+          BASE_VER=$(tr -d '[:space:]' < VERSION || echo "1.0.1")
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+            if [ -z "$TAG" ]; then
+              TAG="v${BASE_VER}"
+            fi
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) TAG="v${TAG}" ;;
+          esac
+          VER="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VER}" >> "$GITHUB_OUTPUT"
+          echo "Resolved release tag: ${TAG} (version: ${VER})"
 
       - name: Run Unit Tests
         run: |
@@ -32,10 +64,7 @@ jobs:
       - name: Compile vSafeGate Binaries (amd64 & arm64)
         run: |
           mkdir -p dist
-          VER=$(tr -d '[:space:]' < VERSION || echo "1.0.1")
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            VER="${GITHUB_REF_NAME#v}"
-          fi
+          VER="${{ steps.meta.outputs.version }}"
           cd mgt
 
           echo "Building vSafeGate v${VER} Linux amd64..."
@@ -63,11 +92,13 @@ jobs:
           sha256sum vsafegate-* caddy-coraza-* > sha256sums.txt
           cat sha256sums.txt
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.meta.outputs.tag }}"
+          ASSETS=(
             dist/vsafegate-linux-amd64
             dist/vsafegate-linux-arm64
             dist/caddy-coraza-linux-amd64
@@ -75,8 +106,15 @@ jobs:
             dist/sha256sums.txt
             install.sh
             VERSION
-          generate_release_notes: true
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          )
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Updating existing release ${TAG}..."
+            gh release upload "$TAG" --clobber "${ASSETS[@]}"
+          else
+            echo "Creating new GitHub Release ${TAG}..."
+            gh release create "$TAG" \
+              --target "${{ github.sha }}" \
+              --title "vSafeGate ${TAG}" \
+              --generate-notes \
+              "${ASSETS[@]}"
+          fi
