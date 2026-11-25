@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -114,6 +116,26 @@ func (cs *CaddySupervisor) runLoop() {
 		cmd := exec.Command(bin, "run", "--environ", "--config", cs.caddyPath)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
+		dataDir := "/etc/vsafegate/caddy-data"
+		cfgDir := filepath.Dir(cs.caddyPath)
+		if os.Getenv("ENV") == "dev" {
+			dataDir = "./caddy-data"
+		}
+		_ = os.MkdirAll(dataDir, 0700)
+		_ = os.MkdirAll(cfgDir, 0755)
+		env := os.Environ()
+		hasHome := false
+		for _, e := range env {
+			if strings.HasPrefix(e, "HOME=") {
+				hasHome = true
+				break
+			}
+		}
+		if !hasHome {
+			env = append(env, "HOME=/root")
+		}
+		env = append(env, "XDG_DATA_HOME="+dataDir, "XDG_CONFIG_HOME="+cfgDir)
+		cmd.Env = env
 		setCaddySysProcAttr(cmd)
 
 		if err := cmd.Start(); err != nil {
