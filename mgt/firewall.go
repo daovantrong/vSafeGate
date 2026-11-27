@@ -96,12 +96,12 @@ func detectFirewallCapabilitiesWith(r firewallRunner) firewallCapabilities {
 		return caps
 	}
 	if _, err := r.LookPath("iptables"); err == nil {
-		if r.Run("iptables", "-L", "-n") == nil {
+		if r.Run("iptables", "-L", "INPUT", "-n") == nil {
 			caps.HasIPTables = true
 		}
 	}
 	if _, err := r.LookPath("ip6tables"); err == nil {
-		if r.Run("ip6tables", "-L", "-n") == nil {
+		if r.Run("ip6tables", "-L", "INPUT", "-n") == nil {
 			caps.HasIP6Tables = true
 		} else {
 			caps.IP6TablesBroken = true
