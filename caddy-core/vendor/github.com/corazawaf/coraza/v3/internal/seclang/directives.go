@@ -1146,6 +1146,11 @@ func directiveSecAuditLogRelevantStatus(options *DirectiveOptions) error {
 	if len(options.Opts) == 0 {
 		return errEmptyOptions
 	}
+	// vSafeGate: allow disabling status-only audit logging while keeping rule-triggered auditlog working
+	if strings.EqualFold(options.Opts, "off") || strings.EqualFold(options.Opts, "none") || options.Opts == "^$" {
+		options.WAF.AuditLogRelevantStatus = nil
+		return nil
+	}
 
 	re, err := options.WAF.Memoizer().Do(options.Opts, func() (any, error) { return regexp.Compile(options.Opts) })
 	if err != nil {

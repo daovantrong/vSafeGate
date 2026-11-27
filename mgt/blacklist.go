@@ -1,14 +1,76 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+	"net/netip"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 )
+
+var cgnatBanGuardPrefix = netip.MustParsePrefix("100.64.0.0/10")
+
+type OffenseRecord struct {
+	Count      int       `json:"count"`
+	LastSeenAt time.Time `json:"last_seen_at"`
+	LastReason string    `json:"last_reason,omitempty"`
+}
+
+type persistedBansState struct {
+	Version   int                      `json:"version"`
+	UpdatedAt time.Time                `json:"updated_at"`
+	Offenses  map[string]OffenseRecord `json:"offenses"`
+}
+
+func (s *AppState) effectiveBansStatePath() string {
+	if s != nil && strings.TrimSpace(s.bansStatePath) != "" {
+		return strings.TrimSpace(s.bansStatePath)
+	}
+	if s != nil && s.configPath != "" && s.configPath != "/etc/vsafegate/config.json" && s.configPath != "./config.json" {
+		return filepath.Join(filepath.Dir(s.configPath), "bans_state.json")
+	}
+	if os.Getenv("ENV") == "dev" {
+		return "./bans_state.json"
+	}
+	return "/var/lib/vsafegate/bans_state.json"
+}
+
+// normalizeBanTarget strictly validates an IP or non-zero CIDR target for blacklisting/escalation.
+func normalizeBanTarget(raw string) (string, error) {
+	str := strings.TrimSpace(raw)
+	if str == "" {
+		return "", fmt.Errorf("địa chỉ IP không được để trống")
+	}
+	if strings.Contains(str, "/") {
+		pfx, err := netip.ParsePrefix(str)
+		if err != nil {
+			return "", fmt.Errorf("CIDR không hợp lệ: %q", str)
+		}
+		if pfx.Bits() == 0 {
+			return "", fmt.Errorf("không cho phép dải mạng 0.0.0.0/0 hoặc ::/0")
+		}
+		if pfx.Addr().Is4In6() {
+			addr4 := pfx.Addr().Unmap()
+			bits := pfx.Bits() - 96
+			if bits <= 0 {
+				return "", fmt.Errorf("CIDR không hợp lệ: %q", str)
+			}
+			pfx = netip.PrefixFrom(addr4, bits)
+		}
+		return pfx.Masked().String(), nil
+	}
+	addr, err := netip.ParseAddr(str)
+	if err != nil {
+		return "", fmt.Errorf("địa chỉ IP không hợp lệ: %q", str)
+	}
+	return addr.Unmap().String(), nil
+}
 
 func isPrivateOrReservedIP(ipStr string) bool {
 	ipStr = strings.TrimSpace(ipStr)
@@ -16,23 +78,105 @@ func isPrivateOrReservedIP(ipStr string) bool {
 		return true
 	}
 	if strings.Contains(ipStr, "/") {
-		ip, _, err := net.ParseCIDR(ipStr)
-		if err != nil {
+		pfx, err := netip.ParsePrefix(ipStr)
+		if err != nil || pfx.Bits() == 0 {
 			return true
 		}
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
+		addr := pfx.Addr().Unmap()
+		if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsUnspecified() || addr.IsMulticast() || cgnatBanGuardPrefix.Contains(addr) {
+			return true
+		}
+		// Reject overly broad prefixes that overlap private/loopback space
+		if addr.Is4() && pfx.Bits() < 8 {
 			return true
 		}
 		return false
 	}
-	parsed := net.ParseIP(ipStr)
-	if parsed == nil {
+	addr, err := netip.ParseAddr(ipStr)
+	if err != nil {
 		return true
 	}
-	if parsed.IsLoopback() || parsed.IsPrivate() || parsed.IsLinkLocalUnicast() || parsed.IsLinkLocalMulticast() {
+	addr = addr.Unmap()
+	if addr.IsLoopback() || addr.IsPrivate() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() || addr.IsUnspecified() || addr.IsMulticast() || cgnatBanGuardPrefix.Contains(addr) {
 		return true
 	}
 	return false
+}
+
+func (s *AppState) loadBansState() {
+	if s == nil {
+		return
+	}
+	path := s.effectiveBansStatePath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var st persistedBansState
+	if err := json.Unmarshal(data, &st); err != nil {
+		return
+	}
+
+	s.mu.Lock()
+	if s.offenseCount == nil {
+		s.offenseCount = make(map[string]int)
+	}
+	if s.offenseRecords == nil {
+		s.offenseRecords = make(map[string]OffenseRecord)
+	}
+	for rawIP, rec := range st.Offenses {
+		norm, err := normalizeBanTarget(rawIP)
+		if err != nil || rec.Count <= 0 || isPrivateOrReservedIP(norm) || isTrustedProxyOrCloudflareIP(norm, s.config) {
+			continue
+		}
+		s.offenseCount[norm] = rec.Count
+		s.offenseRecords[norm] = rec
+	}
+	s.mu.Unlock()
+}
+
+func (s *AppState) saveBansState() {
+	if s == nil {
+		return
+	}
+	path := s.effectiveBansStatePath()
+	if path == "" {
+		return
+	}
+
+	s.bansStateMu.Lock()
+	defer s.bansStateMu.Unlock()
+
+	s.mu.RLock()
+	st := persistedBansState{
+		Version:   1,
+		UpdatedAt: time.Now().UTC(),
+		Offenses:  make(map[string]OffenseRecord, len(s.offenseCount)),
+	}
+	for ip, cnt := range s.offenseCount {
+		if cnt <= 0 {
+			continue
+		}
+		rec := s.offenseRecords[ip]
+		rec.Count = cnt
+		if rec.LastSeenAt.IsZero() {
+			rec.LastSeenAt = st.UpdatedAt
+		}
+		st.Offenses[ip] = rec
+	}
+	s.mu.RUnlock()
+
+	data, err := json.MarshalIndent(st, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.MkdirAll(filepath.Dir(path), 0750)
+	tmp := path + ".tmp"
+	if os.WriteFile(tmp, data, 0600) == nil {
+		if os.Rename(tmp, path) == nil {
+			_ = os.Chmod(path, 0600)
+		}
+	}
 }
 
 func formatRemainingTime(expiresAt time.Time) (int64, string) {
@@ -66,6 +210,21 @@ func (s *AppState) addRecentLog(entry AttackLog) {
 	}
 }
 
+func (s *AppState) publishAttackLog(entry AttackLog) {
+	if s == nil {
+		return
+	}
+	if s.logManager != nil {
+		_ = s.logManager.Append(entry)
+	}
+	if s.telemetry != nil {
+		s.telemetry.RecordThreatEvent(entry)
+	}
+	if s.sseBroker != nil {
+		s.sseBroker.Publish("attack", entry)
+	}
+}
+
 func (s *AppState) isWhitelisted(ipStr string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -77,6 +236,29 @@ func (s *AppState) isWhitelistedLocked(ipStr string) bool {
 	if ipStr == "" {
 		return true
 	}
+	if strings.Contains(ipStr, "/") {
+		pfx, err := netip.ParsePrefix(ipStr)
+		if err != nil {
+			return true
+		}
+		for _, w := range s.config.WhitelistIPs {
+			target := strings.TrimSpace(w.IP)
+			if target == "" {
+				continue
+			}
+			if wpfx, perr := netip.ParsePrefix(target); perr == nil {
+				if wpfx.Overlaps(pfx) {
+					return true
+				}
+			} else if waddr, aerr := netip.ParseAddr(target); aerr == nil {
+				if pfx.Contains(waddr.Unmap()) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
 	parsedIP := net.ParseIP(ipStr)
 	if parsedIP == nil {
 		return true
@@ -101,10 +283,11 @@ func (s *AppState) isWhitelistedLocked(ipStr string) bool {
 }
 
 func (s *AppState) banIP(ip, reason string, durationHours int) {
-	ip = strings.TrimSpace(ip)
-	if isPrivateOrReservedIP(ip) {
+	norm, err := normalizeBanTarget(ip)
+	if err != nil || isPrivateOrReservedIP(norm) {
 		return
 	}
+	ip = norm
 
 	s.mu.Lock()
 	if s.isWhitelistedLocked(ip) {
@@ -112,12 +295,29 @@ func (s *AppState) banIP(ip, reason string, durationHours int) {
 		log.Printf("[Whitelist] IP %s thuộc danh sách Cho Phép (Whitelist), bỏ qua chặn!", ip)
 		return
 	}
+	if isTrustedProxyOrCloudflareIP(ip, s.config) {
+		s.mu.Unlock()
+		log.Printf("[Anti-Self-DoS] IP %s thuộc Cloudflare Edge / Trusted Proxy, từ chối đưa vào Blacklist Kernel!", ip)
+		return
+	}
+
+	offenseChanged := false
 	if durationHours < 0 {
 		if s.offenseCount == nil {
 			s.offenseCount = make(map[string]int)
 		}
+		if s.offenseRecords == nil {
+			s.offenseRecords = make(map[string]OffenseRecord)
+		}
 		s.offenseCount[ip]++
 		offenses := s.offenseCount[ip]
+		s.offenseRecords[ip] = OffenseRecord{
+			Count:      offenses,
+			LastSeenAt: time.Now().UTC(),
+			LastReason: reason,
+		}
+		offenseChanged = true
+
 		if offenses == 1 {
 			durationHours = s.config.DefaultBanTTL
 			if durationHours <= 0 {
@@ -138,9 +338,11 @@ func (s *AppState) banIP(ip, reason string, durationHours int) {
 		expiresAt = now.Add(time.Duration(durationHours) * time.Hour)
 	}
 
-	// Immediate Linux Kernel ipset drop (O(1))
+	// Immediate Linux Kernel ipset drop (O(1)) for IPv4 addresses/CIDRs
 	if runtime.GOOS == "linux" {
-		exec.Command("ipset", "add", "vsafegate-blacklist", ip, "-exist").Run()
+		if isIPv4Target(ip) {
+			_ = exec.Command("ipset", "add", "vsafegate-blacklist", ip, "-exist").Run()
+		}
 	}
 
 	// Update in-memory Map & Config Slice
@@ -200,9 +402,12 @@ func (s *AppState) banIP(ip, reason string, durationHours int) {
 	s.addRecentLog(logEntry)
 	s.mu.Unlock()
 
-	// Persistent log to JSONL
-	if s.logManager != nil {
-		s.logManager.Append(logEntry)
+	if offenseChanged {
+		s.saveBansState()
+	}
+	s.publishAttackLog(logEntry)
+	if s.alertEngine != nil {
+		s.alertEngine.NotifyIPBan(ip, reason, "Kernel ipset", durationHours)
 	}
 
 	s.saveConfig()
@@ -211,10 +416,18 @@ func (s *AppState) banIP(ip, reason string, durationHours int) {
 	}
 }
 
+func isIPv4Target(target string) bool {
+	if strings.Contains(target, "/") {
+		pfx, err := netip.ParsePrefix(target)
+		return err == nil && pfx.Addr().Unmap().Is4()
+	}
+	addr, err := netip.ParseAddr(target)
+	return err == nil && addr.Unmap().Is4()
+}
+
 func (s *AppState) clearAllBannedIPs(reason string) {
-	// Flush kernel ipset
 	if runtime.GOOS == "linux" {
-		exec.Command("ipset", "flush", "vsafegate-blacklist").Run()
+		_ = exec.Command("ipset", "flush", "vsafegate-blacklist").Run()
 	}
 
 	s.mu.Lock()
@@ -222,6 +435,8 @@ func (s *AppState) clearAllBannedIPs(reason string) {
 	s.bannedMap = make(map[string]*BannedIPEntry)
 	s.config.BannedIPs = []BannedIPEntry{}
 	s.config.BlacklistIP = []string{}
+	s.offenseCount = make(map[string]int)
+	s.offenseRecords = make(map[string]OffenseRecord)
 
 	if reason == "" {
 		reason = "[Admin] Xóa toàn bộ danh sách Blacklist"
@@ -243,11 +458,8 @@ func (s *AppState) clearAllBannedIPs(reason string) {
 	s.addRecentLog(logEntry)
 	s.mu.Unlock()
 
-	// Persistent log to JSONL
-	if s.logManager != nil {
-		s.logManager.Append(logEntry)
-	}
-
+	s.saveBansState()
+	s.publishAttackLog(logEntry)
 	s.saveConfig()
 	if s.reloadManager != nil {
 		s.reloadManager.Trigger()
@@ -255,18 +467,33 @@ func (s *AppState) clearAllBannedIPs(reason string) {
 }
 
 func (s *AppState) unbanIP(ip, reason string) {
+	resetOffenses := !strings.HasPrefix(reason, "[TTL Expired]")
+	s.unbanIPInternal(ip, reason, resetOffenses)
+}
+
+func (s *AppState) unbanIPInternal(ip, reason string, resetOffenses bool) {
 	ip = strings.TrimSpace(ip)
 	if ip == "" {
 		return
 	}
+	if norm, err := normalizeBanTarget(ip); err == nil {
+		ip = norm
+	}
 
-	// Delete from kernel ipset
 	if runtime.GOOS == "linux" {
-		exec.Command("ipset", "del", "vsafegate-blacklist", ip).Run()
+		_ = exec.Command("ipset", "del", "vsafegate-blacklist", ip).Run()
 	}
 
 	s.mu.Lock()
 	delete(s.bannedMap, ip)
+	offenseChanged := false
+	if resetOffenses {
+		if _, ok := s.offenseCount[ip]; ok {
+			delete(s.offenseCount, ip)
+			offenseChanged = true
+		}
+		delete(s.offenseRecords, ip)
+	}
 
 	filteredBanned := make([]BannedIPEntry, 0, len(s.config.BannedIPs))
 	for _, b := range s.config.BannedIPs {
@@ -304,11 +531,10 @@ func (s *AppState) unbanIP(ip, reason string) {
 	s.addRecentLog(logEntry)
 	s.mu.Unlock()
 
-	// Persistent log to JSONL
-	if s.logManager != nil {
-		s.logManager.Append(logEntry)
+	if offenseChanged {
+		s.saveBansState()
 	}
-
+	s.publishAttackLog(logEntry)
 	s.saveConfig()
 	if s.reloadManager != nil {
 		s.reloadManager.Trigger()
@@ -355,33 +581,61 @@ func (s *AppState) startBanTTLExpirer() {
 
 			for _, ip := range expiredIPs {
 				log.Printf("[Blacklist TTL] IP %s ban duration expired. Automatically unbanning...", ip)
-				s.unbanIP(ip, "[TTL Expired] Tự động mở khóa sau thời gian cách ly")
+				s.unbanIPInternal(ip, "[TTL Expired] Tự động mở khóa sau thời gian cách ly", false)
 			}
+			s.expireShieldBans(now)
 		}
 	}()
 }
 
-func (s *AppState) addWhitelistIP(ip, note string) error {
-	ip = strings.TrimSpace(ip)
+func normalizeWhitelistInput(raw string) (string, error) {
+	ip := strings.TrimSpace(raw)
 	if ip == "" {
-		return fmt.Errorf("Địa chỉ IP không được để trống")
+		return "", fmt.Errorf("Địa chỉ IP không được để trống")
 	}
-
-	// Validate IP or CIDR
 	if strings.Contains(ip, "/") {
-		if _, _, err := net.ParseCIDR(ip); err != nil {
-			return fmt.Errorf("Định dạng dải mạng CIDR không hợp lệ (ví dụ: 192.168.1.0/24)")
+		pfx, err := netip.ParsePrefix(ip)
+		if err != nil {
+			return "", fmt.Errorf("Định dạng dải mạng CIDR không hợp lệ (ví dụ: 192.168.1.0/24)")
 		}
-	} else {
-		if net.ParseIP(ip) == nil {
-			return fmt.Errorf("Địa chỉ IP không hợp lệ (ví dụ: 1.2.3.4)")
+		if pfx.Bits() == 0 {
+			return "", fmt.Errorf("Không cho phép thêm dải mạng 0.0.0.0/0 hoặc ::/0 vào Whitelist")
 		}
+		if pfx.Addr().Is4In6() {
+			addr4 := pfx.Addr().Unmap()
+			bits := pfx.Bits() - 96
+			if bits < 0 {
+				bits = 0
+			}
+			pfx = netip.PrefixFrom(addr4, bits)
+		}
+		return pfx.Masked().String(), nil
 	}
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return "", fmt.Errorf("Địa chỉ IP không hợp lệ (ví dụ: 1.2.3.4)")
+	}
+	return addr.Unmap().String(), nil
+}
+
+func (s *AppState) addWhitelistIP(ip, note string) error {
+	norm, err := normalizeWhitelistInput(ip)
+	if err != nil {
+		return err
+	}
+	ip = norm
 
 	s.mu.Lock()
 
-	// If this IP was currently banned, unban it immediately
+	// If this IP was currently banned at kernel or L7 Shield, unban it immediately
 	delete(s.bannedMap, ip)
+	offenseChanged := false
+	if _, ok := s.offenseCount[ip]; ok {
+		delete(s.offenseCount, ip)
+		offenseChanged = true
+	}
+	delete(s.offenseRecords, ip)
+
 	newBanned := make([]BannedIPEntry, 0, len(s.config.BannedIPs))
 	for _, b := range s.config.BannedIPs {
 		if b.IP != ip {
@@ -389,8 +643,27 @@ func (s *AppState) addWhitelistIP(ip, note string) error {
 		}
 	}
 	s.config.BannedIPs = newBanned
+	newLegacy := make([]string, 0, len(s.config.BlacklistIP))
+	for _, b := range s.config.BlacklistIP {
+		if b != ip {
+			newLegacy = append(newLegacy, b)
+		}
+	}
+	s.config.BlacklistIP = newLegacy
+
+	shieldChanged := false
+	newShield := make([]ShieldBanEntry, 0, len(s.config.ShieldBannedIPs))
+	for _, sb := range s.config.ShieldBannedIPs {
+		if sb.IP == ip {
+			shieldChanged = true
+			continue
+		}
+		newShield = append(newShield, sb)
+	}
+	s.config.ShieldBannedIPs = newShield
+
 	if runtime.GOOS == "linux" {
-		exec.Command("ipset", "del", "vsafegate-blacklist", ip).Run()
+		_ = exec.Command("ipset", "del", "vsafegate-blacklist", ip).Run()
 	}
 
 	// Add or update Whitelist
@@ -410,34 +683,42 @@ func (s *AppState) addWhitelistIP(ip, note string) error {
 		})
 	}
 
-	// Add to kernel ipset vsafegate-allowed
+	// Immediately add to kernel ipset vsafegate-whitelist & vsafegate-allowed on Linux
 	if runtime.GOOS == "linux" {
-		exec.Command("ipset", "add", "vsafegate-allowed", ip, "-exist").Run()
+		_ = exec.Command("ipset", "add", "vsafegate-whitelist", ip, "-exist").Run()
+		_ = exec.Command("ipset", "add", "vsafegate-allowed", ip, "-exist").Run()
 	}
 	s.mu.Unlock()
 
+	if offenseChanged {
+		s.saveBansState()
+	}
 	s.saveConfig()
+	if shieldChanged && s.reloadManager != nil {
+		s.reloadManager.Trigger()
+	}
+	s.triggerFirewallSync()
 	return nil
 }
 
 func (s *AppState) removeWhitelistIP(ip string) error {
-	ip = strings.TrimSpace(ip)
-	s.mu.Lock()
+	trimmed := strings.TrimSpace(ip)
+	norm, err := normalizeWhitelistInput(trimmed)
+	if err != nil {
+		norm = trimmed
+	}
 
+	s.mu.Lock()
 	newWL := make([]WhitelistIPEntry, 0, len(s.config.WhitelistIPs))
 	for _, w := range s.config.WhitelistIPs {
-		if w.IP != ip {
+		if w.IP != trimmed && w.IP != norm {
 			newWL = append(newWL, w)
 		}
 	}
 	s.config.WhitelistIPs = newWL
-
-	// Remove from kernel ipset vsafegate-allowed
-	if runtime.GOOS == "linux" {
-		exec.Command("ipset", "del", "vsafegate-allowed", ip).Run()
-	}
 	s.mu.Unlock()
 
 	s.saveConfig()
+	s.triggerFirewallSync()
 	return nil
 }

@@ -38,7 +38,7 @@ NC='\033[0m'
 cleanup() {
     rm -rf "$TMP_SRC" "$TMP_GO" "$TMP_GOPATH" /tmp/vsafegate_dl /tmp/caddy_dl 2>/dev/null || true
     if [ "$ALPINE_TMP_GO" -eq 1 ]; then
-        apk del .vsafegate-build >/dev/null 2>&1 || true
+        apk del .vsafegate-go .vsafegate-build >/dev/null 2>&1 || true
     fi
 }
 trap cleanup EXIT
@@ -166,20 +166,26 @@ do_uninstall() {
           /etc/cron.daily/vsafegate-threatintel /etc/periodic/daily/vsafegate-threatintel
 
     if [ -f "$CADDY_BIN" ] || [ -f /usr/local/bin/caddy ]; then
-        if grep -q "vSafeGate" /etc/caddy/Caddyfile 2>/dev/null || \
-           ("$CADDY_BIN" list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza)") || \
-           (/usr/local/bin/caddy list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza)"); then
+        if grep -q "vSafeGate" /etc/caddy/Caddyfile 2>/dev/null || [ -f /etc/caddy/caddy.json ] || \
+           ("$CADDY_BIN" list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza|vsafegate_pre_tls|dns\.providers\.cloudflare)") || \
+           (/usr/local/bin/caddy list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza|vsafegate_pre_tls|dns\.providers\.cloudflare)"); then
             rm -f "$CADDY_BIN" /usr/local/bin/caddy
         fi
     fi
     echo -e "${GREEN}[OK] Binaries and cron jobs removed.${NC}"
 
     echo -e "${YELLOW}[3/5] Removing configuration directories and logs...${NC}"
-    rm -rf "$CONFIG_DIR" "$CADDY_DIR" "$LOG_DIR" "$CADDY_LOG_DIR"
+    rm -rf "$CONFIG_DIR" "$CADDY_DIR" "$LOG_DIR" "$CADDY_LOG_DIR" /var/lib/vsafegate
     echo -e "${GREEN}[OK] Configs and logs cleaned up.${NC}"
 
     echo -e "${YELLOW}[4/5] Removing vSafeGate iptables rules & kernel ipsets...${NC}"
     if command -v iptables >/dev/null 2>&1; then
+        while iptables -D INPUT -j VSAFEGATE_INPUT 2>/dev/null; do :; done
+        iptables -F VSAFEGATE_INPUT 2>/dev/null || true
+        iptables -X VSAFEGATE_INPUT 2>/dev/null || true
+        while iptables -D OUTPUT -j VSAFEGATE_OUTPUT 2>/dev/null; do :; done
+        iptables -F VSAFEGATE_OUTPUT 2>/dev/null || true
+        iptables -X VSAFEGATE_OUTPUT 2>/dev/null || true
         while iptables -D INPUT -i tailscale+ -j ACCEPT 2>/dev/null; do :; done
         while iptables -D INPUT -i zt+ -j ACCEPT 2>/dev/null; do :; done
         while iptables -D INPUT -p udp --dport 41641 -j ACCEPT 2>/dev/null; do :; done
@@ -193,9 +199,14 @@ do_uninstall() {
         while iptables -D INPUT -p tcp -m multiport --dports 2251,22222,22 -j ACCEPT 2>/dev/null; do :; done
         while iptables -D INPUT -p tcp -m multiport --dports 22,22222 -j ACCEPT 2>/dev/null; do :; done
     fi
+    if command -v ip6tables >/dev/null 2>&1; then
+        while ip6tables -D INPUT -j VSAFEGATE6_INPUT 2>/dev/null; do :; done
+        ip6tables -F VSAFEGATE6_INPUT 2>/dev/null || true
+        ip6tables -X VSAFEGATE6_INPUT 2>/dev/null || true
+    fi
 
     if command -v ipset >/dev/null 2>&1; then
-        for s in vsafegate-blacklist vsafegate-blacklist-tmp vsafegate-threatintel vsafegate-threatintel-tmp vsafegate-countries vsafegate-allowed; do
+        for s in vsafegate-blacklist vsafegate-blacklist-tmp vsafegate-threatintel vsafegate-threatintel-tmp vsafegate-countries vsafegate-countries-tmp vsafegate-allowed vsafegate-allowed-tmp vsafegate-whitelist vsafegate-whitelist-tmp vsafegate-trusted vsafegate-trusted-tmp; do
             ipset destroy "$s" 2>/dev/null || true
         done
     fi
@@ -220,23 +231,28 @@ fi
 echo -e "${BLUE}[1/8] Architecture:${NC} ${BOLD}${TARGET_ARCH}${NC}"
 echo -e "${BLUE}[2/8] System Detected:${NC} ${BOLD}${OS}${NC} (${INIT_SYSTEM})"
 
-# 4. Install OS Prerequisites Automatically
+# 4. Install OS Prerequisites Automatically (Debian/PVE VM, LXC, Alpine, RHEL, Arch)
 echo -e "${BLUE}[3/8] Installing system dependencies (iptables, ipset, curl, git, python3)...${NC}"
 case "$OS" in
     debian)
         export DEBIAN_FRONTEND=noninteractive
         apt-get update -y >/dev/null 2>&1 || true
+        apt-get install -y curl git ipset iptables iproute2 procps ca-certificates tar gzip python3 >/dev/null 2>&1 || \
         apt-get install -y curl git ipset iptables ca-certificates tar gzip python3 >/dev/null 2>&1
         ;;
     alpine)
         apk update >/dev/null 2>&1 || true
+        apk add --no-cache curl git ipset iptables ip6tables iproute2 procps ca-certificates tar gzip bash python3 >/dev/null 2>&1 || \
         apk add --no-cache curl git ipset iptables ca-certificates tar gzip bash python3 >/dev/null 2>&1
         ;;
     rhel)
+        yum install -y curl git ipset iptables iproute procps-ng ca-certificates tar gzip python3 >/dev/null 2>&1 || \
+        dnf install -y curl git ipset iptables iproute procps-ng ca-certificates tar gzip python3 >/dev/null 2>&1 || \
         yum install -y curl git ipset iptables ca-certificates tar gzip python3 >/dev/null 2>&1 || \
         dnf install -y curl git ipset iptables ca-certificates tar gzip python3 >/dev/null 2>&1
         ;;
     arch)
+        pacman -Sy --noconfirm curl git ipset iptables iproute2 procps-ng ca-certificates tar gzip python3 >/dev/null 2>&1 || \
         pacman -Sy --noconfirm curl git ipset iptables ca-certificates tar gzip python3 >/dev/null 2>&1
         ;;
 esac
@@ -256,28 +272,30 @@ if [ -n "$ADMIN_IP" ]; then
     echo -e "${YELLOW}[SAFETY] Detected active SSH admin IP (${BOLD}${ADMIN_IP}${NC}${YELLOW}) -> auto-adding to allowlist.${NC}"
 fi
 
+# Helper: Parse Go major/minor safely (handles rc/beta tags without tripping set -e)
+parse_go_ver_ok() {
+    GO_CUR=$(go version 2>/dev/null | awk '{print $3}' | sed 's/^go//' || true)
+    GO_MAJ=$(printf '%s' "$GO_CUR" | awk -F. '{gsub(/[^0-9].*/,"",$1); print ($1==""?"0":$1)}' || echo "0")
+    GO_MIN=$(printf '%s' "$GO_CUR" | awk -F. '{gsub(/[^0-9].*/,"",$2); print ($2==""?"0":$2)}' || echo "0")
+    GO_MAJ="${GO_MAJ:-0}"
+    GO_MIN="${GO_MIN:-0}"
+    [ "$GO_MAJ" -gt 1 ] || { [ "$GO_MAJ" -eq 1 ] && [ "$GO_MIN" -ge 27 ]; }
+}
+
 # Helper: Ensure Go >= 1.27.1 is available for reproducible vendored source builds
 ensure_go() {
-    if command -v go >/dev/null 2>&1; then
-        GO_CUR=$(go version | awk '{print $3}' | sed 's/go//')
-        GO_MAJ=$(echo "$GO_CUR" | cut -d. -f1)
-        GO_MIN=$(echo "$GO_CUR" | cut -d. -f2)
-        if [ "${GO_MAJ:-0}" -gt 1 ] || { [ "${GO_MAJ:-0}" -eq 1 ] && [ "${GO_MIN:-0}" -ge 27 ]; }; then
-            return 0
-        fi
+    if command -v go >/dev/null 2>&1 && parse_go_ver_ok; then
+        return 0
     fi
 
     if [ "$OS" = "alpine" ]; then
-        apk add --no-cache --virtual .vsafegate-build go >/dev/null 2>&1 || true
-        if command -v go >/dev/null 2>&1; then
-            GO_CUR=$(go version | awk '{print $3}' | sed 's/go//')
-            GO_MAJ=$(echo "$GO_CUR" | cut -d. -f1)
-            GO_MIN=$(echo "$GO_CUR" | cut -d. -f2)
-            if [ "${GO_MAJ:-0}" -gt 1 ] || { [ "${GO_MAJ:-0}" -eq 1 ] && [ "${GO_MIN:-0}" -ge 27 ]; }; then
-                ALPINE_TMP_GO=1
-                return 0
-            fi
+        apk add --no-cache --virtual .vsafegate-go go >/dev/null 2>&1 || true
+        if command -v go >/dev/null 2>&1 && parse_go_ver_ok; then
+            ALPINE_TMP_GO=1
+            return 0
         fi
+        # Remove outdated repo Go before installing gcompat so virtual packages never collide
+        apk del .vsafegate-go >/dev/null 2>&1 || true
         # Fallback if Alpine repo Go < 1.27: install gcompat so official pinned Go binary runs cleanly
         apk add --no-cache --virtual .vsafegate-build gcompat >/dev/null 2>&1
         ALPINE_TMP_GO=1
@@ -322,11 +340,23 @@ elif [ "$INIT_SYSTEM" = "openrc" ]; then
     rm -f /etc/init.d/caddy
 fi
 
-mkdir -p "$CONFIG_DIR" "$LOG_DIR" "$CADDY_DIR" "$CADDY_RULES_DIR" "$CADDY_LOG_DIR" /usr/local/bin /usr/bin
+mkdir -p "$CONFIG_DIR" "${CONFIG_DIR}/certs" /var/lib/vsafegate "$LOG_DIR" "$CADDY_DIR" "$CADDY_RULES_DIR" "$CADDY_LOG_DIR" /usr/local/bin /usr/bin
+chmod 700 "${CONFIG_DIR}/certs"
+chmod 750 "$CONFIG_DIR" /var/lib/vsafegate
 
 # 6. Install vSafeGate Binary (GitHub Releases -> Local -> Vendored Source Build)
 echo -e "${BLUE}[4/8] Installing vSafeGate core daemon...${NC}"
 LATEST_TAG=$(curl -s --max-time 10 "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || true)
+if [ ! -f "./VERSION" ]; then
+    if [ -n "$LATEST_TAG" ]; then
+        VSAFE_VER="${LATEST_TAG#v}"
+    else
+        REMOTE_VER=$(curl -fsSL --max-time 5 "${RAW_URL}/VERSION" 2>/dev/null | tr -d '[:space:]' || true)
+        if [ -n "$REMOTE_VER" ]; then
+            VSAFE_VER="${REMOTE_VER#v}"
+        fi
+    fi
+fi
 
 VSAFE_OK=false
 if [ -n "$LATEST_TAG" ]; then
@@ -353,34 +383,74 @@ if [ "$VSAFE_OK" = false ]; then
     (cd "${SRC_DIR}/mgt" && CGO_ENABLED=0 go build -ldflags="-s -w -X main.AppVersion=${VSAFE_VER}" -o "$INSTALL_BIN" .)
     chmod 755 "$INSTALL_BIN"
 fi
-echo -e "${GREEN}[OK] vSafeGate binary installed at ${INSTALL_BIN}.${NC}"
+echo -e "${GREEN}[OK] vSafeGate binary installed at ${INSTALL_BIN} (v${VSAFE_VER}).${NC}"
 
-# 7. Install Caddy + Coraza WAF (GitHub Releases -> Local -> Vendored In-Repo Build)
+# Helper: verify custom vSafeGate modules are compiled into the Caddy binary
+caddy_has_required_modules() {
+    local bin="$1"
+    [ -x "$bin" ] || return 1
+    local mods
+    mods=$("$bin" list-modules 2>/dev/null || true)
+    echo "$mods" | grep -qE "(^|[[:space:]])http\.handlers\.waf([[:space:]]|$)" && \
+    echo "$mods" | grep -qE "(^|[[:space:]])http\.handlers\.vsafegate_shield([[:space:]]|$)" && \
+    echo "$mods" | grep -qE "(^|[[:space:]])caddy\.listeners\.vsafegate_pre_tls([[:space:]]|$)" && \
+    echo "$mods" | grep -qE "(^|[[:space:]])dns\.providers\.cloudflare([[:space:]]|$)"
+}
+
+# 7. Install Caddy + Coraza WAF (Exact Version & Module Verification -> Release -> Local -> Vendored Build)
 echo -e "${BLUE}[5/8] Installing vendored Caddy + Coraza WAF (L7 Core & HTTPS Proxy)...${NC}"
+TARGET_CADDY_VER="${VSAFE_VER#v}"
+INSTALLED_CADDY_VER=""
+if [ -f "${CONFIG_DIR}/.caddy-version" ]; then
+    INSTALLED_CADDY_VER=$(tr -d '[:space:]' < "${CONFIG_DIR}/.caddy-version" | sed 's/^v//')
+fi
+
+# Remove stale /usr/local/bin/caddy if it shadows /usr/bin/caddy
+if [ -x /usr/local/bin/caddy ] && [ "$CADDY_BIN" != "/usr/local/bin/caddy" ]; then
+    rm -f /usr/local/bin/caddy
+fi
+
 CADDY_OK=false
-if command -v caddy >/dev/null 2>&1 && caddy list-modules 2>/dev/null | grep -qE "(http\.handlers\.waf|coraza)"; then
-    echo -e "${GREEN}[OK] Existing Caddy with Coraza WAF module detected.${NC}"
+if [ -x "$CADDY_BIN" ] && [ "$INSTALLED_CADDY_VER" = "$TARGET_CADDY_VER" ] && caddy_has_required_modules "$CADDY_BIN"; then
+    echo -e "${GREEN}[OK] Existing Caddy v${INSTALLED_CADDY_VER} with all required vSafeGate modules detected.${NC}"
     CADDY_OK=true
+elif [ -x "$CADDY_BIN" ]; then
+    echo -e "${YELLOW}[INFO] Existing Caddy requires upgrade (installed: '${INSTALLED_CADDY_VER:-unknown}', target: '${TARGET_CADDY_VER}', or missing custom modules).${NC}"
 fi
 
 if [ "$CADDY_OK" = false ] && [ -n "$LATEST_TAG" ]; then
     CADDY_URL="https://github.com/${REPO}/releases/download/${LATEST_TAG}/caddy-coraza-linux-${TARGET_ARCH}"
     echo -e "      Trying GitHub Release Caddy+Coraza (${LATEST_TAG})..."
     if curl -fsSL -o /tmp/caddy_dl "$CADDY_URL"; then
-        mv -f /tmp/caddy_dl "$CADDY_BIN"
-        chmod 755 "$CADDY_BIN"
-        CADDY_OK=true
+        chmod 755 /tmp/caddy_dl
+        if caddy_has_required_modules /tmp/caddy_dl; then
+            mv -f /tmp/caddy_dl "$CADDY_BIN"
+            CADDY_OK=true
+        else
+            echo -e "${YELLOW}[WARN] Release Caddy binary lacks required custom modules; falling back to vendored source build.${NC}"
+            rm -f /tmp/caddy_dl
+        fi
     fi
 fi
 
-if [ "$CADDY_OK" = false ] && [ "$TARGET_ARCH" = "amd64" ] && [ -f "./caddy-linux-amd64" ]; then
+if [ "$CADDY_OK" = false ] && [ -f "./caddy-coraza-linux-${TARGET_ARCH}" ]; then
+    cp -f "./caddy-coraza-linux-${TARGET_ARCH}" "$CADDY_BIN"
+    chmod 755 "$CADDY_BIN"
+    if caddy_has_required_modules "$CADDY_BIN"; then
+        CADDY_OK=true
+    fi
+elif [ "$CADDY_OK" = false ] && [ "$TARGET_ARCH" = "amd64" ] && [ -f "./caddy-linux-amd64" ]; then
     cp -f "./caddy-linux-amd64" "$CADDY_BIN"
     chmod 755 "$CADDY_BIN"
-    CADDY_OK=true
+    if caddy_has_required_modules "$CADDY_BIN"; then
+        CADDY_OK=true
+    fi
 elif [ "$CADDY_OK" = false ] && [ "$TARGET_ARCH" = "amd64" ] && [ -f "./caddy.gz" ]; then
     gzip -dc "./caddy.gz" > "$CADDY_BIN"
     chmod 755 "$CADDY_BIN"
-    CADDY_OK=true
+    if caddy_has_required_modules "$CADDY_BIN"; then
+        CADDY_OK=true
+    fi
 fi
 
 if [ "$CADDY_OK" = false ]; then
@@ -389,9 +459,14 @@ if [ "$CADDY_OK" = false ]; then
     ensure_source
     (cd "${SRC_DIR}/caddy-core" && CGO_ENABLED=0 go build -mod=vendor -ldflags="-s -w" -o "$CADDY_BIN" .)
     chmod 755 "$CADDY_BIN"
+    if ! caddy_has_required_modules "$CADDY_BIN"; then
+        echo -e "${RED}[ERROR] Built Caddy binary failed module verification!${NC}"
+        exit 1
+    fi
     CADDY_OK=true
 fi
-echo -e "${GREEN}[OK] Caddy + Coraza WAF installed at ${CADDY_BIN}.${NC}"
+echo "${TARGET_CADDY_VER}" > "${CONFIG_DIR}/.caddy-version"
+echo -e "${GREEN}[OK] Caddy + Coraza WAF v${TARGET_CADDY_VER} installed & verified at ${CADDY_BIN}.${NC}"
 
 # 8. Initialize Safe Configuration & Threat Intelligence Sync Script
 echo -e "${BLUE}[6/8] Initializing safe default configuration & Threat Intel sync...${NC}"
@@ -451,9 +526,11 @@ with open(os.environ["CONFIG_PATH_ENV"], "w", encoding="utf-8") as f:
     json.dump(cfg, f, indent=2, ensure_ascii=False)
     f.write("\n")
 PYEOF
-    echo -e "${GREEN}[OK] Safe configuration initialized at ${CONFIG_FILE}.${NC}"
+    chmod 600 "$CONFIG_FILE"
+    echo -e "${GREEN}[OK] Safe configuration initialized at ${CONFIG_FILE} (0600).${NC}"
 else
-    echo -e "${YELLOW}[INFO] Existing ${CONFIG_FILE} preserved.${NC}"
+    chmod 600 "$CONFIG_FILE"
+    echo -e "${YELLOW}[INFO] Existing ${CONFIG_FILE} preserved (permissions hardened to 0600).${NC}"
 fi
 
 # Install automated Threat Intelligence feed sync script + daily cron
@@ -465,9 +542,9 @@ else
     cat <<'EOF' > /usr/local/bin/vsafegate-sync-threatintel.sh
 #!/usr/bin/env bash
 set -e
-TMP_LIST="/tmp/vsafegate_ti_raw.txt"
-IPSET_SCRIPT="/tmp/vsafegate_ti_restore.txt"
-rm -f "$TMP_LIST" "$IPSET_SCRIPT"
+TMP_LIST=$(mktemp /tmp/vsafegate_ti_raw.XXXXXX)
+IPSET_SCRIPT=$(mktemp /tmp/vsafegate_ti_restore.XXXXXX)
+trap 'rm -f "$TMP_LIST" "$IPSET_SCRIPT"' EXIT
 
 curl -fsSL --max-time 15 "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset" >> "$TMP_LIST" 2>/dev/null || true
 curl -fsSL --max-time 15 "https://www.spamhaus.org/drop/drop.txt" >> "$TMP_LIST" 2>/dev/null || true
@@ -482,19 +559,24 @@ ipset flush vsafegate-threatintel-tmp
 
 echo "flush vsafegate-threatintel-tmp" > "$IPSET_SCRIPT"
 grep -Eo '^([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?' "$TMP_LIST" | \
+    grep -Ev '/0$' | \
     grep -Ev '^(0\.|10\.|127\.|169\.254\.|192\.168\.|100\.(6[4-9]|[7-9][0-9]|1[0-1][0-9]|12[0-7])\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|224\.|240\.)' | \
     sort -u | awk '{print "add vsafegate-threatintel-tmp " $1 " -exist"}' >> "$IPSET_SCRIPT"
 
 ipset restore < "$IPSET_SCRIPT"
 ipset swap vsafegate-threatintel-tmp vsafegate-threatintel
 ipset destroy vsafegate-threatintel-tmp
-rm -f "$TMP_LIST" "$IPSET_SCRIPT"
 EOF
 fi
 chmod 755 /usr/local/bin/vsafegate-sync-threatintel.sh
 
-if [ -d /etc/periodic/daily ]; then
+if [ "$OS" = "alpine" ] || [ -d /etc/periodic/daily ]; then
+    mkdir -p /etc/periodic/daily
     ln -sf /usr/local/bin/vsafegate-sync-threatintel.sh /etc/periodic/daily/vsafegate-threatintel
+    if [ "$INIT_SYSTEM" = "openrc" ] && command -v rc-service >/dev/null 2>&1; then
+        rc-update add crond default >/dev/null 2>&1 || true
+        rc-service crond start >/dev/null 2>&1 || true
+    fi
 elif [ -d /etc/cron.daily ]; then
     ln -sf /usr/local/bin/vsafegate-sync-threatintel.sh /etc/cron.daily/vsafegate-threatintel
 fi
@@ -570,18 +652,21 @@ echo -e "${BLUE}[8/8] Syncing initial Threat Intelligence feed (background-safe)
 /usr/local/bin/vsafegate-sync-threatintel.sh >/dev/null 2>&1 || true
 
 # 10. Summary Banner
-HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1 || echo "127.0.0.1")
+HOST_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+[ -z "$HOST_IP" ] && HOST_IP=$(ip -4 addr show scope global 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -n1 || true)
 [ -z "$HOST_IP" ] && HOST_IP="127.0.0.1"
 
 echo -e "\n${GREEN}${BOLD}========================================================================${NC}"
 echo -e "${GREEN}${BOLD}   🎉 vSafeGate v${VSAFE_VER} Installed & Started Successfully!${NC}"
 echo -e "${GREEN}${BOLD}========================================================================${NC}"
-echo -e "  🌐 ${BOLD}Web Admin Dashboard:${NC}  ${CYAN}https://${HOST_IP}:4438/${NC}"
+echo -e "  🌐 ${BOLD}Web Admin Dashboard:${NC}  ${CYAN}https://127.0.0.1:4438/${NC} + auto-detected private LAN / Tailscale IPs (:4438)"
+echo -e "  🚇 ${BOLD}SSH Tunnel Option:${NC}    ${YELLOW}ssh -N -L 4438:127.0.0.1:4438 root@${HOST_IP}${NC}"
+echo -e "     ${BOLD}(or customize listen IPs/CIDRs via Settings -> Management Listen IPs)${NC}"
 echo -e "  🔐 ${BOLD}Authentication:${NC}       Linux PAM server account (sudo user)"
-echo -e "  📂 ${BOLD}Configuration File:${NC}   ${CONFIG_FILE}"
-echo -e "  🛡️  ${BOLD}Caddy & WAF Rules:${NC}    ${CADDY_DIR}/Caddyfile & ${CADDY_RULES_DIR}/custom-rules.conf"
+echo -e "  📂 ${BOLD}Configuration File:${NC}   ${CONFIG_FILE} (0600)"
+echo -e "  🛡️  ${BOLD}Caddy & WAF Config:${NC}   ${CADDY_DIR}/caddy.json & ${CADDY_RULES_DIR}/custom-rules.conf"
 echo -e "  📜 ${BOLD}Attack Log Stream:${NC}    ${LOG_DIR}/attacks.jsonl"
 echo -e "  🔄 ${BOLD}One-Line Updater:${NC}     ${YELLOW}sudo vsafegate-update${NC}"
 echo -e "  🧹 ${BOLD}Clean Uninstaller:${NC}    ${YELLOW}sudo vsafegate-uninstall${NC} (or ${YELLOW}--purge${NC})"
-echo -e "  ⚙️  ${BOLD}Single Service Ctrl:${NC}  ${YELLOW}sudo systemctl status|restart vsafegate${NC} / ${YELLOW}sudo rc-service vsafegate status${NC}"
+echo -e "  ⚙️  ${BOLD}Unified CLI Control:${NC}  ${YELLOW}sudo vsafegate status|restart|logs|update|uninstall${NC}"
 echo -e "${GREEN}${BOLD}========================================================================${NC}\n"

@@ -239,7 +239,12 @@ func (m corazaModule) ServeHTTP(w http.ResponseWriter, r *http.Request, next cad
 			zap.String("uri", r.RequestURI),
 			zap.String("client_ip", client),
 			zap.String("unique_id", tx.ID()),
+			zap.String("action", it.Action),
+			zap.Int("rule_id", it.RuleID),
 		)
+		if it.Action == "drop" {
+			panic(http.ErrAbortHandler)
+		}
 		return caddyhttp.HandlerError{
 			StatusCode: obtainStatusCodeFromInterruptionOrDefault(it, http.StatusOK),
 			ID:         tx.ID(),

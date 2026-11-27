@@ -493,12 +493,16 @@ func (w *WAF) Memoizer() *memoize.Memoizer {
 	return w.memoizer
 }
 
-// Close releases cached resources owned by this WAF instance.
+// Close releases cached resources and audit log writer owned by this WAF instance.
 // Cached entries shared with other WAF instances remain until all owners release them.
 // Transactions already in-flight are unaffected as they hold their own references.
 func (w *WAF) Close() error {
+	var err error
 	w.closeOnce.Do(func() {
 		memoize.Release(w.memoizerID)
+		if w.auditLogWriterInitialized && w.auditLogWriter != nil {
+			err = w.auditLogWriter.Close()
+		}
 	})
-	return nil
+	return err
 }

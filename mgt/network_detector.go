@@ -135,6 +135,10 @@ func registerNetworkDetectorRoutes(mux *http.ServeMux) {
 	}))
 
 	mux.HandleFunc("/api/network/interfaces/apply", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
 		var payload struct {
 			CIDRs []struct {
 				CIDR string `json:"cidr"`

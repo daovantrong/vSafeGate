@@ -16,18 +16,25 @@ import (
 // CaddySupervisor manages the lifecycle of the Caddy + Coraza WAF L7 child process
 // directly inside the vsafegate daemon so administrators only operate a single service.
 type CaddySupervisor struct {
-	caddyPath    string
-	adminAddr    string
-	mu           sync.Mutex
-	cmd          *exec.Cmd
-	stopCh       chan struct{}
-	doneCh       chan struct{}
-	stopOnce     sync.Once
-	started      atomic.Bool
-	stopped      atomic.Bool
-	running      atomic.Bool
-	managed      atomic.Bool
-	restartCount atomic.Int64
+	caddyPath        string
+	adminAddr        string
+	mu               sync.Mutex
+	cmd              *exec.Cmd
+	stopCh           chan struct{}
+	doneCh           chan struct{}
+	stopOnce         sync.Once
+	started          atomic.Bool
+	stopped          atomic.Bool
+	running          atomic.Bool
+	managed          atomic.Bool
+	restartCount     atomic.Int64
+	onUnexpectedExit func(uptime time.Duration, err error)
+}
+
+func (cs *CaddySupervisor) SetOnUnexpectedExit(fn func(uptime time.Duration, err error)) {
+	cs.mu.Lock()
+	cs.onUnexpectedExit = fn
+	cs.mu.Unlock()
 }
 
 func NewCaddySupervisor(caddyPath string) *CaddySupervisor {
@@ -175,6 +182,12 @@ func (cs *CaddySupervisor) runLoop() {
 		uptime := time.Since(startTime)
 		cs.restartCount.Add(1)
 		log.Printf("[Caddy Supervisor] Caddy exited unexpectedly after %s (%v); restarting...", uptime.Round(time.Millisecond), waitErr)
+		cs.mu.Lock()
+		cb := cs.onUnexpectedExit
+		cs.mu.Unlock()
+		if cb != nil {
+			go cb(uptime, waitErr)
+		}
 
 		if uptime >= 5*time.Second {
 			backoff = 1 * time.Second
@@ -189,6 +202,13 @@ func (cs *CaddySupervisor) runLoop() {
 }
 
 func (cs *CaddySupervisor) Reload() error {
+	if cs.caddyPath != "" {
+		if data, err := os.ReadFile(cs.caddyPath); err == nil {
+			if err := reloadCaddyViaAdminAPI(cs.adminAddr, data); err == nil {
+				return nil
+			}
+		}
+	}
 	bin := findCaddyBinary()
 	if bin == "" {
 		return fmt.Errorf("caddy binary not found")

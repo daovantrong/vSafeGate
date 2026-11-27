@@ -1,5 +1,6 @@
 # Private credentials, notes, and local environment files
 Memory.md
+SERVERS.md
 *.local.md
 *.secret.*
 .env

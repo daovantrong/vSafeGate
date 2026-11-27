@@ -35,12 +35,16 @@ func (s *AppState) getSystemMetrics() SystemMetrics {
 	}
 	metrics.GeoIPMode = s.config.GeoIPMode
 	if metrics.GeoIPMode == "" {
-		metrics.GeoIPMode = "whitelist"
+		metrics.GeoIPMode = "disabled"
 	}
 	metrics.L4ServiceCount = len(s.config.L4Services)
 	s.mu.RUnlock()
 
-	metrics.GeoIPCount = 1
+	if metrics.GeoIPMode == "disabled" {
+		metrics.GeoIPCount = 0
+	} else {
+		metrics.GeoIPCount = 1
+	}
 	metrics.IDSAlerts = atomic.LoadInt64(&idsAlertTotal)
 
 	var l4Active int64

@@ -546,8 +546,8 @@ func (s *Server) isHyphenatedVariant(key string) bool {
 var defaultProtocols = []string{"h1", "h2", "h3"}
 
 var (
-	ServerHeader = "Caddy"
-	serverHeader = []string{ServerHeader}
+	ServerHeader = ""
+	serverHeader []string
 )
 
 // ServeHTTP is the entry point for all HTTP requests.
@@ -626,9 +626,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w = idleWriter
 	}
 
-	// set the Server header
+	// vSafeGate: omit Server header when ServerHeader is empty
 	h := w.Header()
-	h["Server"] = serverHeader
+	if ServerHeader != "" {
+		h["Server"] = serverHeader
+	}
 
 	// advertise HTTP/3, if enabled
 	if s.h3server != nil && r.ProtoMajor < 3 {

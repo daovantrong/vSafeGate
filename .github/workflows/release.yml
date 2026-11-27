@@ -56,10 +56,10 @@ jobs:
           echo "version=${VER}" >> "$GITHUB_OUTPUT"
           echo "Resolved release tag: ${TAG} (version: ${VER})"
 
-      - name: Run Unit Tests
+      - name: Run Unit Tests (mgt & caddy-core with -race)
         run: |
-          cd mgt
-          go test -v ./...
+          (cd mgt && go vet ./... && go test -race -count=1 -v ./...)
+          (cd caddy-core && go vet -mod=vendor . ./modules/... && go test -mod=vendor -race -count=1 -v . ./modules/...)
 
       - name: Compile vSafeGate Binaries (amd64 & arm64)
         run: |

@@ -156,14 +156,16 @@ func (s *AppState) getSystemMetrics() SystemMetrics {
 	}
 	metrics.GeoIPMode = s.config.GeoIPMode
 	if metrics.GeoIPMode == "" {
-		metrics.GeoIPMode = "whitelist"
+		metrics.GeoIPMode = "disabled"
 	}
 	s.mu.RUnlock()
 
 	if metrics.GeoIPMode == "whitelist" {
 		metrics.GeoIPCount = getIpsetCount("vsafegate-allowed")
-	} else {
+	} else if metrics.GeoIPMode == "blacklist" {
 		metrics.GeoIPCount = getIpsetCount("vsafegate-countries")
+	} else {
+		metrics.GeoIPCount = 0
 	}
 
 	metrics.IDSAlerts = atomic.LoadInt64(&idsAlertTotal)
