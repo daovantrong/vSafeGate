@@ -243,7 +243,8 @@ case "$OS" in
     alpine)
         apk update >/dev/null 2>&1 || true
         apk add --no-cache curl git ipset iptables ip6tables iproute2 procps ca-certificates tar gzip bash python3 >/dev/null 2>&1 || \
-        apk add --no-cache curl git ipset iptables ca-certificates tar gzip bash python3 >/dev/null 2>&1
+        apk add --no-cache curl git ipset iptables ca-certificates tar gzip bash python3 >/dev/null 2>&1 || \
+        { command -v iptables >/dev/null 2>&1 && command -v ipset >/dev/null 2>&1 && command -v curl >/dev/null 2>&1; }
         ;;
     rhel)
         yum install -y curl git ipset iptables iproute procps-ng ca-certificates tar gzip python3 >/dev/null 2>&1 || \
