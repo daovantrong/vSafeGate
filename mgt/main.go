@@ -3893,6 +3893,10 @@ func setupRouter(s *AppState) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		pushed, perr := state.PushExistingBannedIPs(r.Context())
+		if perr != nil {
+			state.recordAuditFromRequest(r, "shared_threat_push", "hub", "warning", perr.Error())
+		}
 		cnt, err := state.SyncSharedThreatList(r.Context())
 		if err != nil {
 			state.recordAuditFromRequest(r, "shared_threat_sync", "hub", "error", err.Error())
@@ -3900,11 +3904,12 @@ func setupRouter(s *AppState) http.Handler {
 			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 			return
 		}
-		state.recordAuditFromRequest(r, "shared_threat_sync", "hub", "success", fmt.Sprintf("synced=%d", cnt))
+		state.recordAuditFromRequest(r, "shared_threat_sync", "hub", "success", fmt.Sprintf("pushed=%d synced=%d", pushed, cnt))
 		json.NewEncoder(w).Encode(map[string]any{
 			"status":  "ok",
+			"pushed":  pushed,
 			"count":   cnt,
-			"message": fmt.Sprintf("Đã đồng bộ %d IP/CIDR từ Shared Threat Hub!", cnt),
+			"message": fmt.Sprintf("Đã đẩy %d IP đã chặn lên Hub và đồng bộ %d IP/CIDR về Firewall!", pushed, cnt),
 		})
 	}))
 

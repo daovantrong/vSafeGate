@@ -221,6 +221,85 @@ func (s *AppState) SyncSharedThreatList(ctx context.Context) (int, error) {
 	return len(validTargets), nil
 }
 
+// PushExistingBannedIPs uploads active public BannedIPs from local config to the central hub.
+func (s *AppState) PushExistingBannedIPs(ctx context.Context) (int, error) {
+	if s == nil {
+		return 0, errors.New("state unavailable")
+	}
+	s.mu.RLock()
+	cfg := s.config.SharedThreat
+	cfgSnap := s.config
+	banned := append([]BannedIPEntry(nil), s.config.BannedIPs...)
+	nodeName := s.effectiveSharedNodeName(cfg)
+	s.mu.RUnlock()
+
+	if !cfg.Enabled || !cfg.PushOnBan {
+		return 0, nil
+	}
+	hubURL := strings.TrimRight(strings.TrimSpace(cfg.HubURL), "/")
+	if hubURL == "" {
+		hubURL = defaultSharedThreatHubURL
+	}
+	if strings.TrimSpace(cfg.APIKey) == "" {
+		return 0, errors.New("chưa cấu hình Shared Threat API Key")
+	}
+
+	now := time.Now()
+	client := &http.Client{Timeout: 8 * time.Second}
+	pushed := 0
+	for _, entry := range banned {
+		if !entry.ExpiresAt.IsZero() && entry.ExpiresAt.Before(now) {
+			continue
+		}
+		norm, err := normalizeBanTarget(entry.IP)
+		if err != nil || isPrivateOrReservedIP(norm) || isTrustedProxyOrCloudflareIP(norm, cfgSnap) {
+			continue
+		}
+		s.mu.RLock()
+		isWL := s.isWhitelistedLocked(norm)
+		s.mu.RUnlock()
+		if isWL {
+			continue
+		}
+		ttlHours := 0
+		if !entry.ExpiresAt.IsZero() {
+			rem := int(entry.ExpiresAt.Sub(now).Hours())
+			if rem < 1 {
+				rem = 1
+			}
+			ttlHours = rem
+		}
+		raw, err := json.Marshal(map[string]any{
+			"ip":        norm,
+			"reason":    entry.Reason,
+			"layer":     "Kernel ipset",
+			"node":      nodeName,
+			"ttl_hours": ttlHours,
+		})
+		if err != nil {
+			continue
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, hubURL+"/api/report.php", bytes.NewReader(raw))
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-vSafeGate-Key", cfg.APIKey)
+		req.Header.Set("User-Agent", "vSafeGate/"+AppVersion)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			return pushed, err
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return pushed, fmt.Errorf("hub HTTP %d", resp.StatusCode)
+		}
+		pushed++
+	}
+	return pushed, nil
+}
+
 func (s *AppState) recordSharedSyncStatus(count int, errMsg string) {
 	s.mu.Lock()
 	s.config.SharedThreat.LastSyncAt = time.Now().UTC()

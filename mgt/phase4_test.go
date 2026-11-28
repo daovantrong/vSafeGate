@@ -1316,10 +1316,18 @@ func TestSharedThreat_Report_Sync_And_API(t *testing.T) {
 	}
 	hubMu.Unlock()
 
-	// 4. Sync filters out private IP (10.20.30.40) & Cloudflare IP (173.245.48.5), keeping 2 public IPs
+	// 4. Seed an existing historical banned IP before sync, then Sync pushes it AND filters feed
+	s.mu.Lock()
+	s.config.BannedIPs = append(s.config.BannedIPs, BannedIPEntry{
+		IP:        "198.51.100.99",
+		Reason:    "Historical Ban",
+		BannedAt:  time.Now().Add(-time.Hour),
+		ExpiresAt: time.Now().Add(12 * time.Hour),
+	})
+	s.mu.Unlock()
 	syncResp := doAuthedJSONReq(h, cookie, http.MethodPost, "/api/shared-threat/sync", nil)
-	if syncResp.Code != http.StatusOK || !strings.Contains(syncResp.Body.String(), `"count":2`) {
-		t.Fatalf("POST /api/shared-threat/sync expected count=2, got %d %s", syncResp.Code, syncResp.Body.String())
+	if syncResp.Code != http.StatusOK || !strings.Contains(syncResp.Body.String(), `"count":2`) || !strings.Contains(syncResp.Body.String(), `"pushed":2`) {
+		t.Fatalf("POST /api/shared-threat/sync expected pushed=2 count=2, got %d %s", syncResp.Code, syncResp.Body.String())
 	}
 
 	// 5. Firewall rule includes vsafegate-shared when enabled
