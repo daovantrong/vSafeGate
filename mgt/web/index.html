@@ -2091,6 +2091,60 @@
             </div>
           </div>
         </div>
+
+        <!-- Shared Threat Intelligence Hub (vsafegate.trong.pro) -->
+        <div class="glass p-5 rounded-2xl border border-gray-800 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-gray-800">
+            <div class="flex items-center gap-2">
+              <i data-lucide="globe" class="w-5 h-5 text-emerald-400"></i>
+              <div>
+                <h4 class="text-sm font-bold text-white">Cơ Sở Dữ Liệu IP Chặn Chung (Shared Threat Intel Hub)</h4>
+                <p class="text-[11px] text-gray-400">Tự động gửi IP vi phạm về máy chủ trung tâm và đồng bộ danh sách chặn chung về Firewall Kernel (`vsafegate-shared`).</p>
+              </div>
+            </div>
+            <label class="inline-flex items-center gap-2 text-xs text-gray-200 cursor-pointer">
+              <input type="checkbox" id="shared-threat-enabled" class="rounded bg-gray-900 border-gray-700 text-emerald-500">
+              <span class="font-semibold">Bật Tính Năng</span>
+            </label>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1">Hub URL</label>
+              <input type="url" id="shared-threat-url" placeholder="https://vsafegate.trong.pro" class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1">Hub API Key</label>
+              <input type="password" id="shared-threat-key" placeholder="vsg_hub_..." class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1">Tên Node (Định Danh)</label>
+              <input type="text" id="shared-threat-node" placeholder="vd: pve.trong.pro" class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-400 mb-1">Chu Kỳ Đồng Bộ (phút)</label>
+              <input type="number" id="shared-threat-interval" min="1" max="1440" value="15" class="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white text-xs font-mono focus:outline-none focus:border-emerald-500">
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-gray-800">
+            <div class="flex flex-wrap items-center gap-4 text-xs text-gray-300">
+              <label class="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="shared-threat-push" checked class="rounded bg-gray-900 border-gray-700 text-emerald-500">
+                <span>Gửi IP khi máy chủ này chặn (Push on Ban)</span>
+              </label>
+              <label class="inline-flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" id="shared-threat-sync" checked class="rounded bg-gray-900 border-gray-700 text-emerald-500">
+                <span>Đồng bộ danh sách chung về Firewall</span>
+              </label>
+              <span id="shared-threat-status" class="text-[11px] font-mono text-gray-400"></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="syncSharedThreatNow()" class="px-3 py-1.5 bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/30 rounded-lg text-xs font-semibold transition">Đồng Bộ Ngay</button>
+              <button type="button" onclick="saveSharedThreatSettings()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition">Lưu Cấu Hình Hub</button>
+            </div>
+          </div>
+        </div>
       </section>
 
     </main>
@@ -3222,6 +3276,7 @@
         fetchCloudflareConfig();
         fetchSMTPSettings();
         if (typeof fetchAlertChannels === 'function') fetchAlertChannels();
+        if (typeof fetchSharedThreatSettings === 'function') fetchSharedThreatSettings();
         fetchLogRetention();
       }
     }
@@ -7546,6 +7601,81 @@
       }
     }
 
+    async function fetchSharedThreatSettings() {
+      try {
+        const res = await fetch('/api/shared-threat');
+        if (!res.ok) return;
+        const d = await res.json();
+        const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+        const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+        setChk('shared-threat-enabled', d.enabled);
+        setVal('shared-threat-url', d.hub_url || 'https://vsafegate.trong.pro');
+        setVal('shared-threat-key', d.has_api_key ? '********' : '');
+        setVal('shared-threat-node', d.node_name || '');
+        setVal('shared-threat-interval', d.sync_interval_min || 15);
+        setChk('shared-threat-push', d.push_on_ban !== false);
+        setChk('shared-threat-sync', d.sync_enabled !== false);
+        const st = document.getElementById('shared-threat-status');
+        if (st) {
+          if (d.last_sync_error) {
+            st.textContent = `Lỗi đồng bộ: ${d.last_sync_error}`;
+            st.className = 'text-[11px] font-mono text-red-400';
+          } else if (d.last_sync_at) {
+            st.textContent = `Đã đồng bộ ${Number(d.last_sync_count || 0)} IP lúc ${new Date(d.last_sync_at).toLocaleString()}`;
+            st.className = 'text-[11px] font-mono text-emerald-400';
+          } else {
+            st.textContent = '';
+          }
+        }
+      } catch (err) {
+        console.error('fetchSharedThreatSettings error:', err);
+      }
+    }
+
+    async function saveSharedThreatSettings() {
+      const payload = {
+        enabled: !!document.getElementById('shared-threat-enabled')?.checked,
+        hub_url: (document.getElementById('shared-threat-url')?.value || '').trim() || 'https://vsafegate.trong.pro',
+        api_key: (document.getElementById('shared-threat-key')?.value || '').trim(),
+        node_name: (document.getElementById('shared-threat-node')?.value || '').trim(),
+        sync_interval_min: parseInt(document.getElementById('shared-threat-interval')?.value || '15', 10) || 15,
+        push_on_ban: !!document.getElementById('shared-threat-push')?.checked,
+        sync_enabled: !!document.getElementById('shared-threat-sync')?.checked
+      };
+      try {
+        const res = await fetch('/api/shared-threat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert('Lỗi lưu Shared Threat Hub: ' + (d.error || res.statusText));
+          return;
+        }
+        await fetchSharedThreatSettings();
+        alert('Đã lưu cấu hình Shared Threat Intel Hub thành công!');
+      } catch (err) {
+        alert('Lỗi kết nối khi lưu Shared Threat Hub: ' + err);
+      }
+    }
+
+    async function syncSharedThreatNow() {
+      try {
+        const res = await fetch('/api/shared-threat/sync', { method: 'POST' });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          alert('Đồng bộ thất bại: ' + (d.error || res.statusText));
+          await fetchSharedThreatSettings();
+          return;
+        }
+        await fetchSharedThreatSettings();
+        alert(d.message || `Đã đồng bộ ${d.count || 0} IP thành công!`);
+      } catch (err) {
+        alert('Lỗi kết nối khi đồng bộ Shared Threat Hub: ' + err);
+      }
+    }
+
     function downloadConfigBackup() {
       window.location.href = '/api/config/backup';
     }
@@ -7573,7 +7703,7 @@
           return;
         }
         input.value = '';
-        await Promise.all([fetchData(), fetchMgmtSettings(), fetchCloudflareConfig(), fetchSMTPSettings(), fetchAlertChannels(), fetchLogRetention()]);
+        await Promise.all([fetchData(), fetchMgmtSettings(), fetchCloudflareConfig(), fetchSMTPSettings(), fetchAlertChannels(), fetchSharedThreatSettings(), fetchLogRetention()]);
         alert(`Khôi phục thành công (${d.sites || 0} sites, ${d.rules || 0} rules, ${d.l4 || 0} L4 services)!`);
       } catch (err) {
         alert('File backup không hợp lệ hoặc lỗi kết nối: ' + err);

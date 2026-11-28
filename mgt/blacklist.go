@@ -409,6 +409,7 @@ func (s *AppState) banIP(ip, reason string, durationHours int) {
 	if s.alertEngine != nil {
 		s.alertEngine.NotifyIPBan(ip, reason, "Kernel ipset", durationHours)
 	}
+	s.ReportBlockedIPAsync(ip, reason, "Kernel ipset", durationHours)
 
 	s.saveConfig()
 	if s.reloadManager != nil {

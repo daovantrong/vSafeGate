@@ -1244,3 +1244,90 @@ func TestAlertChannels_Telegram_Discord_Webhook_APIAndDispatch(t *testing.T) {
 		t.Fatalf("expected fan-out delivery to Discord (%d) and Webhook (%d)", dcCnt, whCnt)
 	}
 }
+
+func TestSharedThreat_Report_Sync_And_API(t *testing.T) {
+	var hubMu sync.Mutex
+	var reported []map[string]any
+	hubSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-vSafeGate-Key") != "hub-secret-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/api/report.php" && r.Method == http.MethodPost {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			hubMu.Lock()
+			reported = append(reported, body)
+			hubMu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+			return
+		}
+		if r.URL.Path == "/api/feed.php" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "text/plain")
+			// Includes public IPs, private IP (must be filtered), and Cloudflare IP (must be filtered)
+			_, _ = w.Write([]byte("203.0.113.55\n198.51.100.44/32\n10.20.30.40\n173.245.48.5\n"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer hubSrv.Close()
+
+	s := newTestAppState(t)
+	h := setupRouter(s)
+	cookie := loginTestSessionCookie(t, h)
+
+	// 1. Configure Shared Threat Hub via API
+	postResp := doAuthedJSONReq(h, cookie, http.MethodPost, "/api/shared-threat", map[string]any{
+		"enabled":           true,
+		"hub_url":           hubSrv.URL,
+		"api_key":           "hub-secret-key",
+		"node_name":         "test-node-1",
+		"push_on_ban":       true,
+		"sync_enabled":      true,
+		"sync_interval_min": 10,
+	})
+	if postResp.Code != http.StatusOK {
+		t.Fatalf("POST /api/shared-threat failed: %d %s", postResp.Code, postResp.Body.String())
+	}
+
+	// 2. GET /api/shared-threat masks api_key
+	getResp := doAuthedJSONReq(h, cookie, http.MethodGet, "/api/shared-threat", nil)
+	if getResp.Code != http.StatusOK || strings.Contains(getResp.Body.String(), "hub-secret-key") {
+		t.Fatalf("GET /api/shared-threat leaked key or failed: %d %s", getResp.Code, getResp.Body.String())
+	}
+
+	// 3. banIP triggers async push to /api/report.php
+	s.banIP("203.0.113.88", "SSH Brute Force", 24)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		hubMu.Lock()
+		n := len(reported)
+		hubMu.Unlock()
+		if n >= 1 {
+			break
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
+	hubMu.Lock()
+	if len(reported) != 1 || reported[0]["ip"] != "203.0.113.88" || reported[0]["node"] != "test-node-1" {
+		hubMu.Unlock()
+		t.Fatalf("unexpected reported payload: %+v", reported)
+	}
+	hubMu.Unlock()
+
+	// 4. Sync filters out private IP (10.20.30.40) & Cloudflare IP (173.245.48.5), keeping 2 public IPs
+	syncResp := doAuthedJSONReq(h, cookie, http.MethodPost, "/api/shared-threat/sync", nil)
+	if syncResp.Code != http.StatusOK || !strings.Contains(syncResp.Body.String(), `"count":2`) {
+		t.Fatalf("POST /api/shared-threat/sync expected count=2, got %d %s", syncResp.Code, syncResp.Body.String())
+	}
+
+	// 5. Firewall rule includes vsafegate-shared when enabled
+	s.mu.RLock()
+	cfgSnap := s.config
+	s.mu.RUnlock()
+	fw := joinRuleSpecs(buildIPv4InputRulesWithShared(cfgSnap, true, true, true, true))
+	if !strings.Contains(fw, "-m set --match-set vsafegate-shared src -j DROP") {
+		t.Fatalf("expected vsafegate-shared DROP rule when enabled, got:\n%s", fw)
+	}
+}

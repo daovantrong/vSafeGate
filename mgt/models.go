@@ -230,6 +230,19 @@ type AlertChannelsConfig struct {
 	WebhookSecret     string `json:"webhook_secret,omitempty"`
 }
 
+type SharedThreatConfig struct {
+	Enabled         bool      `json:"enabled"`
+	HubURL          string    `json:"hub_url,omitempty"`
+	APIKey          string    `json:"api_key,omitempty"`
+	NodeName        string    `json:"node_name,omitempty"`
+	PushOnBan       bool      `json:"push_on_ban"`
+	SyncEnabled     bool      `json:"sync_enabled"`
+	SyncIntervalMin int       `json:"sync_interval_min,omitempty"`
+	LastSyncAt      time.Time `json:"last_sync_at,omitempty"`
+	LastSyncCount   int       `json:"last_sync_count,omitempty"`
+	LastSyncError   string    `json:"last_sync_error,omitempty"`
+}
+
 type AdminAuditEntry struct {
 	ID        string    `json:"id"`
 	Timestamp time.Time `json:"timestamp"`
@@ -278,6 +291,7 @@ type Config struct {
 	Cloudflare            CloudflareConfig   `json:"cloudflare,omitempty"`
 	SMTP                  SMTPConfig          `json:"smtp,omitempty"`
 	Alerts                AlertChannelsConfig `json:"alerts,omitempty"`
+	SharedThreat          SharedThreatConfig  `json:"shared_threat,omitempty"`
 	LogRetentionDays      int                `json:"log_retention_days,omitempty"`
 	LogMaxDiskMB          int                `json:"log_max_disk_mb,omitempty"`
 	ShieldChallengeSecret string             `json:"shield_challenge_secret,omitempty"`

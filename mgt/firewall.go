@@ -294,6 +294,10 @@ func collectActiveL4Ports(cfg Config) (tcpPorts, udpPorts []string) {
 }
 
 func buildIPv4InputRules(cfg Config, hasThreatIntel, hasTrustedSet, hasWhitelistSet bool) []firewallRuleSpec {
+	return buildIPv4InputRulesWithShared(cfg, hasThreatIntel, hasTrustedSet, hasWhitelistSet, false)
+}
+
+func buildIPv4InputRulesWithShared(cfg Config, hasThreatIntel, hasTrustedSet, hasWhitelistSet, hasSharedThreat bool) []firewallRuleSpec {
 	mode := strings.ToLower(strings.TrimSpace(cfg.GeoIPMode))
 	if mode == "" {
 		mode = "disabled"
@@ -332,6 +336,11 @@ func buildIPv4InputRules(cfg Config, hasThreatIntel, hasTrustedSet, hasWhitelist
 	if hasThreatIntel {
 		rules = append(rules, firewallRuleSpec{
 			args: []string{"-m", "set", "--match-set", "vsafegate-threatintel", "src", "-j", "DROP"},
+		})
+	}
+	if hasSharedThreat && cfg.SharedThreat.Enabled && cfg.SharedThreat.SyncEnabled {
+		rules = append(rules, firewallRuleSpec{
+			args: []string{"-m", "set", "--match-set", "vsafegate-shared", "src", "-j", "DROP"},
 		})
 	}
 
@@ -660,8 +669,9 @@ func (s *AppState) applyIptablesRulesWithLocked(r firewallRunner) {
 		hasTI := caps.HasIPSet && ipsetExists(r, "vsafegate-threatintel")
 		hasTrusted := caps.HasIPSet && ipsetExists(r, "vsafegate-trusted")
 		hasWL := caps.HasIPSet && ipsetExists(r, "vsafegate-whitelist")
+		hasShared := caps.HasIPSet && ipsetExists(r, "vsafegate-shared")
 
-		inRules := buildIPv4InputRules(cfgSnap, hasTI, hasTrusted, hasWL)
+		inRules := buildIPv4InputRulesWithShared(cfgSnap, hasTI, hasTrusted, hasWL, hasShared)
 		applyChainWith(r, "iptables", "INPUT", "VSAFEGATE_INPUT", inRules)
 
 		if cfgSnap.DefensePolicy.EgressFilterEnabled {

@@ -1035,6 +1035,7 @@ func main() {
 	if state.alertEngine != nil {
 		state.alertEngine.Start()
 	}
+	state.startSharedThreatSyncLoop(nil)
 
 	handler := setupRouter(state)
 	port := "127.0.0.1:9444"
@@ -3809,6 +3810,101 @@ func setupRouter(s *AppState) http.Handler {
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "ok",
 			"message": fmt.Sprintf("Đã gửi cảnh báo thử nghiệm qua %s thành công!", strings.ToUpper(req.Channel)),
+		})
+	}))
+
+	// Shared Threat Intelligence Hub API (Central Blocklist Sync & Reporting)
+	mux.HandleFunc("/api/shared-threat", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet {
+			state.mu.RLock()
+			cfg := state.config.SharedThreat
+			state.mu.RUnlock()
+			hasKey := cfg.APIKey != ""
+			if hasKey {
+				cfg.APIKey = "********"
+			}
+			if strings.TrimSpace(cfg.HubURL) == "" {
+				cfg.HubURL = defaultSharedThreatHubURL
+			}
+			if cfg.SyncIntervalMin <= 0 {
+				cfg.SyncIntervalMin = 15
+			}
+			json.NewEncoder(w).Encode(struct {
+				SharedThreatConfig
+				HasAPIKey bool `json:"has_api_key"`
+			}{
+				SharedThreatConfig: cfg,
+				HasAPIKey:          hasKey,
+			})
+			return
+		}
+		if r.Method == http.MethodPost {
+			var req struct {
+				SharedThreatConfig
+				ClearAPIKey bool `json:"clear_api_key"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, "Payload Shared Threat không hợp lệ", 400)
+				return
+			}
+			state.mu.RLock()
+			prev := state.config.SharedThreat
+			state.mu.RUnlock()
+
+			next := req.SharedThreatConfig
+			if req.ClearAPIKey {
+				next.APIKey = ""
+			} else if next.APIKey == "" || next.APIKey == "********" {
+				next.APIKey = prev.APIKey
+			}
+			next.LastSyncAt = prev.LastSyncAt
+			next.LastSyncCount = prev.LastSyncCount
+			next.LastSyncError = prev.LastSyncError
+			if err := validateSharedThreatConfig(&next); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+			state.mu.Lock()
+			state.config.SharedThreat = next
+			state.mu.Unlock()
+			state.saveConfig()
+			state.triggerFirewallSync()
+			state.recordAuditFromRequest(r, "shared_threat_update", next.HubURL, "success", fmt.Sprintf("enabled=%v push=%v sync=%v", next.Enabled, next.PushOnBan, next.SyncEnabled))
+
+			hasKey := next.APIKey != ""
+			if hasKey {
+				next.APIKey = "********"
+			}
+			json.NewEncoder(w).Encode(map[string]any{
+				"status":        "ok",
+				"shared_threat": next,
+				"has_api_key":   hasKey,
+			})
+			return
+		}
+		http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+	}))
+
+	mux.HandleFunc("/api/shared-threat/sync", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		cnt, err := state.SyncSharedThreatList(r.Context())
+		if err != nil {
+			state.recordAuditFromRequest(r, "shared_threat_sync", "hub", "error", err.Error())
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+			return
+		}
+		state.recordAuditFromRequest(r, "shared_threat_sync", "hub", "success", fmt.Sprintf("synced=%d", cnt))
+		json.NewEncoder(w).Encode(map[string]any{
+			"status":  "ok",
+			"count":   cnt,
+			"message": fmt.Sprintf("Đã đồng bộ %d IP/CIDR từ Shared Threat Hub!", cnt),
 		})
 	}))
 
