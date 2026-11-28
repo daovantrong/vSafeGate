@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,12 +14,87 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
 )
 
 const defaultSharedThreatHubURL = "https://vsafegate.trong.pro"
+
+func hashHardwareID(prefix, raw string) string {
+	sum := sha256.Sum256([]byte(prefix + strings.ToLower(strings.TrimSpace(raw))))
+	return "vsg_" + hex.EncodeToString(sum[:])[:24]
+}
+
+func isValidHardwareToken(s string) bool {
+	s = strings.ToLower(strings.TrimSpace(strings.TrimRight(s, "\x00")))
+	if s == "" || len(s) < 6 {
+		return false
+	}
+	switch s {
+	case "not specified", "to be filled by o.e.m.", "default string", "none", "unknown",
+		"00000000-0000-0000-0000-000000000000", "ffffffff-ffff-ffff-ffff-ffffffffffff":
+		return false
+	}
+	return true
+}
+
+func computeHardwareServerID(persistPath string) string {
+	if runtime.GOOS == "linux" {
+		if b, err := os.ReadFile("/sys/class/dmi/id/product_uuid"); err == nil && isValidHardwareToken(string(b)) {
+			return hashHardwareID("vsg-dmi-v1:", string(b))
+		}
+		if b, err := os.ReadFile("/proc/device-tree/serial-number"); err == nil && isValidHardwareToken(string(b)) {
+			return hashHardwareID("vsg-dt-v1:", string(b))
+		}
+		if b, err := os.ReadFile("/etc/machine-id"); err == nil && isValidHardwareToken(string(b)) {
+			return hashHardwareID("vsg-mid-v1:", string(b))
+		}
+	}
+	if persistPath != "" {
+		if b, err := os.ReadFile(persistPath); err == nil {
+			id := strings.TrimSpace(string(b))
+			if strings.HasPrefix(id, "vsg_") && len(id) == 28 {
+				return id
+			}
+		}
+	}
+	var rnd [12]byte
+	_, _ = rand.Read(rnd[:])
+	id := "vsg_" + hex.EncodeToString(rnd[:])
+	if persistPath != "" {
+		_ = os.MkdirAll(filepath.Dir(persistPath), 0750)
+		_ = os.WriteFile(persistPath, []byte(id+"\n"), 0600)
+	}
+	return id
+}
+
+func (s *AppState) getOrComputeServerID() string {
+	if s == nil {
+		return computeHardwareServerID("")
+	}
+	s.mu.RLock()
+	cached := s.config.SharedThreat.ServerID
+	cfgPath := s.configPath
+	s.mu.RUnlock()
+	if strings.HasPrefix(cached, "vsg_") && len(cached) == 28 {
+		return cached
+	}
+	persistPath := ""
+	if cfgPath != "" {
+		persistPath = filepath.Join(filepath.Dir(cfgPath), ".server_id")
+	}
+	id := computeHardwareServerID(persistPath)
+	s.mu.Lock()
+	if s.config.SharedThreat.ServerID == "" {
+		s.config.SharedThreat.ServerID = id
+	} else {
+		id = s.config.SharedThreat.ServerID
+	}
+	s.mu.Unlock()
+	return id
+}
 
 func validateSharedThreatConfig(cfg *SharedThreatConfig) error {
 	if cfg == nil {
@@ -74,6 +152,7 @@ func (s *AppState) ReportBlockedIPAsync(ip, reason, layer string, ttlHours int) 
 	if !cfg.Enabled || !cfg.PushOnBan || strings.TrimSpace(cfg.APIKey) == "" {
 		return
 	}
+	serverID := s.getOrComputeServerID()
 	norm, err := normalizeBanTarget(ip)
 	if err != nil || isPrivateOrReservedIP(norm) || isWL || isTrusted {
 		return
@@ -91,6 +170,7 @@ func (s *AppState) ReportBlockedIPAsync(ip, reason, layer string, ttlHours int) 
 			"reason":    reason,
 			"layer":     layer,
 			"node":      nodeName,
+			"server_id": serverID,
 			"ttl_hours": ttlHours,
 		}
 		raw, err := json.Marshal(payload)
@@ -244,6 +324,7 @@ func (s *AppState) PushExistingBannedIPs(ctx context.Context) (int, error) {
 		return 0, errors.New("chưa cấu hình Shared Threat API Key")
 	}
 
+	serverID := s.getOrComputeServerID()
 	now := time.Now()
 	client := &http.Client{Timeout: 8 * time.Second}
 	pushed := 0
@@ -274,6 +355,7 @@ func (s *AppState) PushExistingBannedIPs(ctx context.Context) (int, error) {
 			"reason":    entry.Reason,
 			"layer":     "Kernel ipset",
 			"node":      nodeName,
+			"server_id": serverID,
 			"ttl_hours": ttlHours,
 		})
 		if err != nil {
@@ -317,10 +399,23 @@ func (s *AppState) startSharedThreatSyncLoop(stopCh <-chan struct{}) {
 	go func() {
 		ticker := time.NewTicker(1 * time.Minute)
 		defer ticker.Stop()
+		var lastHeartbeat time.Time
 		for {
 			s.mu.RLock()
 			cfg := s.config.SharedThreat
 			s.mu.RUnlock()
+
+			if cfg.Enabled && strings.TrimSpace(cfg.APIKey) != "" {
+				if lastHeartbeat.IsZero() || time.Since(lastHeartbeat) >= 2*time.Minute {
+					ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+					if err := s.SendHubHeartbeat(ctx); err != nil {
+						log.Printf("[SharedThreat] Heartbeat failed: %v", err)
+					} else {
+						lastHeartbeat = time.Now()
+					}
+					cancel()
+				}
+			}
 
 			if cfg.Enabled && cfg.SyncEnabled && strings.TrimSpace(cfg.APIKey) != "" {
 				interval := time.Duration(cfg.SyncIntervalMin) * time.Minute
@@ -345,4 +440,66 @@ func (s *AppState) startSharedThreatSyncLoop(stopCh <-chan struct{}) {
 			}
 		}
 	}()
+}
+
+func (s *AppState) SendHubHeartbeat(ctx context.Context) error {
+	if s == nil {
+		return errors.New("state unavailable")
+	}
+	serverID := s.getOrComputeServerID()
+	s.mu.RLock()
+	cfg := s.config.SharedThreat
+	activeBans := len(s.config.BannedIPs)
+	nodeName := s.effectiveSharedNodeName(cfg)
+	s.mu.RUnlock()
+
+	if !cfg.Enabled || strings.TrimSpace(cfg.APIKey) == "" {
+		return nil
+	}
+	hubURL := strings.TrimRight(strings.TrimSpace(cfg.HubURL), "/")
+	if hubURL == "" {
+		hubURL = defaultSharedThreatHubURL
+	}
+	var threatsBlocked int64
+	if s.telemetry != nil {
+		sum := s.telemetry.Summary()
+		for _, v := range sum.Categories {
+			threatsBlocked += int64(v)
+		}
+		threatsBlocked += int64(sum.TotalKernelPkts)
+	}
+	if threatsBlocked == 0 && s.logManager != nil {
+		threatsBlocked = int64(s.logManager.TotalCount())
+	}
+
+	raw, err := json.Marshal(map[string]any{
+		"server_id":       serverID,
+		"node":            nodeName,
+		"version":         AppVersion,
+		"os":              runtime.GOOS,
+		"arch":            runtime.GOARCH,
+		"active_bans":     activeBans,
+		"threats_blocked": threatsBlocked,
+	})
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, hubURL+"/api/heartbeat.php", bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-vSafeGate-Key", cfg.APIKey)
+	req.Header.Set("User-Agent", "vSafeGate/"+AppVersion)
+
+	resp, err := (&http.Client{Timeout: 8 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("heartbeat HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	return nil
 }

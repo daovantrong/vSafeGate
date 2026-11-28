@@ -2098,7 +2098,7 @@
             <div class="flex items-center gap-2">
               <i data-lucide="globe" class="w-5 h-5 text-emerald-400"></i>
               <div>
-                <h4 class="text-sm font-bold text-white">Cơ Sở Dữ Liệu IP Chặn Chung (Shared Threat Intel Hub)</h4>
+                <h4 class="text-sm font-bold text-white">Cơ Sở Dữ Liệu IP Chặn Chung (Shared Threat Intel Hub) <span id="shared-threat-server-id" class="ml-1.5 text-[10px] font-mono px-2 py-0.5 rounded bg-gray-800 text-cyan-300 border border-gray-700"></span></h4>
                 <p class="text-[11px] text-gray-400">Tự động gửi IP vi phạm về máy chủ trung tâm và đồng bộ danh sách chặn chung về Firewall Kernel (`vsafegate-shared`).</p>
               </div>
             </div>
@@ -7609,6 +7609,8 @@
         const setVal = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
         const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
         setChk('shared-threat-enabled', d.enabled);
+        const sidEl = document.getElementById('shared-threat-server-id');
+        if (sidEl) sidEl.textContent = d.server_id ? `ID: ${d.server_id}` : '';
         setVal('shared-threat-url', d.hub_url || 'https://vsafegate.trong.pro');
         setVal('shared-threat-key', d.has_api_key ? '********' : '');
         setVal('shared-threat-node', d.node_name || '');

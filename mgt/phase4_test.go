@@ -1246,11 +1246,26 @@ func TestAlertChannels_Telegram_Discord_Webhook_APIAndDispatch(t *testing.T) {
 }
 
 func TestSharedThreat_Report_Sync_And_API(t *testing.T) {
+	if id1, id2 := hashHardwareID("vsg-dmi-v1:", "ABCD-1234"), hashHardwareID("vsg-dmi-v1:", "abcd-1234 "); id1 != id2 || !strings.HasPrefix(id1, "vsg_") || len(id1) != 28 {
+		t.Fatalf("expected deterministic 28-char server_id, got %q vs %q", id1, id2)
+	}
+
 	var hubMu sync.Mutex
 	var reported []map[string]any
+	var heartbeats []map[string]any
 	hubSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-vSafeGate-Key") != "hub-secret-key" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if r.URL.Path == "/api/heartbeat.php" && r.Method == http.MethodPost {
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			hubMu.Lock()
+			heartbeats = append(heartbeats, body)
+			hubMu.Unlock()
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
 			return
 		}
 		if r.URL.Path == "/api/report.php" && r.Method == http.MethodPost {
@@ -1328,6 +1343,16 @@ func TestSharedThreat_Report_Sync_And_API(t *testing.T) {
 	syncResp := doAuthedJSONReq(h, cookie, http.MethodPost, "/api/shared-threat/sync", nil)
 	if syncResp.Code != http.StatusOK || !strings.Contains(syncResp.Body.String(), `"count":2`) || !strings.Contains(syncResp.Body.String(), `"pushed":2`) {
 		t.Fatalf("POST /api/shared-threat/sync expected pushed=2 count=2, got %d %s", syncResp.Code, syncResp.Body.String())
+	}
+	hubMu.Lock()
+	hbCount := len(heartbeats)
+	var hbSID string
+	if hbCount > 0 {
+		hbSID, _ = heartbeats[0]["server_id"].(string)
+	}
+	hubMu.Unlock()
+	if hbCount != 1 || !strings.HasPrefix(hbSID, "vsg_") || len(hbSID) != 28 {
+		t.Fatalf("expected 1 valid heartbeat with vsg_ server_id, got count=%d sid=%q", hbCount, hbSID)
 	}
 
 	// 5. Firewall rule includes vsafegate-shared when enabled

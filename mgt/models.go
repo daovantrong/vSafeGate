@@ -232,6 +232,7 @@ type AlertChannelsConfig struct {
 
 type SharedThreatConfig struct {
 	Enabled         bool      `json:"enabled"`
+	ServerID        string    `json:"server_id,omitempty"`
 	HubURL          string    `json:"hub_url,omitempty"`
 	APIKey          string    `json:"api_key,omitempty"`
 	NodeName        string    `json:"node_name,omitempty"`

@@ -3817,9 +3817,11 @@ func setupRouter(s *AppState) http.Handler {
 	mux.HandleFunc("/api/shared-threat", authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet {
+			sid := state.getOrComputeServerID()
 			state.mu.RLock()
 			cfg := state.config.SharedThreat
 			state.mu.RUnlock()
+			cfg.ServerID = sid
 			hasKey := cfg.APIKey != ""
 			if hasKey {
 				cfg.APIKey = "********"
@@ -3893,6 +3895,7 @@ func setupRouter(s *AppState) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		_ = state.SendHubHeartbeat(r.Context())
 		pushed, perr := state.PushExistingBannedIPs(r.Context())
 		if perr != nil {
 			state.recordAuditFromRequest(r, "shared_threat_push", "hub", "warning", perr.Error())
