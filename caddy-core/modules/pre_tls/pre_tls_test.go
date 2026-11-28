@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"strings"
@@ -289,14 +290,17 @@ func TestPreTLS_StrictCloudflareOrigin(t *testing.T) {
 
 	cli, err := net.Dial("tcp", wrapped.Addr().String())
 	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
-	_ = cli.SetReadDeadline(time.Now().Add(2 * time.Second))
-	buf, _ := io.ReadAll(cli)
-	_ = cli.Close()
-
-	if len(buf) != 0 {
-		t.Fatalf("expected 0 bytes from strict origin drop, got %d", len(buf))
+		// On Linux loopback, SetLinger(0)+Close() inside Accept() can send TCP RST before Dial returns.
+		if !strings.Contains(err.Error(), "connection reset") && !errors.Is(err, io.EOF) {
+			t.Fatalf("Dial: %v", err)
+		}
+	} else {
+		_ = cli.SetReadDeadline(time.Now().Add(2 * time.Second))
+		buf, _ := io.ReadAll(cli)
+		_ = cli.Close()
+		if len(buf) != 0 {
+			t.Fatalf("expected 0 bytes from strict origin drop, got %d", len(buf))
+		}
 	}
 	select {
 	case <-acceptReturned:
