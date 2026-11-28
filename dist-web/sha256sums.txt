@@ -1,0 +1,4 @@
+b25fc27a85ae201131b6259cae15c95bbc4058959aa9ce7b5d3e1c8d795c0eb5  vsafegate-linux-amd64
+2a1f3b65ebf45afeb3db2c391be470219f1e838fb6d18f8d2327b5be56e99f7f  vsafegate-linux-arm64
+b44455f1adb28db485606971a8704e2882205a095b41479576c4bfcdca49d22c  caddy-coraza-linux-amd64
+28aba2737b3bc9c1678cdb1bf9575510c2327c59a112b594495ff64adf8cedc5  caddy-coraza-linux-arm64
